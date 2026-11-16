@@ -29,8 +29,7 @@ git remote add origin https://github.com/ชื่อผู้ใช้/ชื�
 git push -u origin main
 ```
 
-4. ในหน้า repository เปิด **Settings > Pages** แล้วตั้ง **Build and deployment > Source** เป็น **GitHub Actions**
-5. เปิดแท็บ **Actions** และรอ workflow ชื่อ **เผยแพร่เว็บบน GitHub Pages** ทำงานเสร็จ ลิงก์เว็บไซต์จะอยู่ใน **Settings > Pages** โดยปกติมีรูปแบบ `https://ชื่อผู้ใช้.github.io/ชื่อคลัง/`
+4. เปิดแท็บ **Actions** และรอ workflow ชื่อ **เผยแพร่เว็บบน GitHub Pages** ทำงานเสร็จ workflow จะเปิดใช้ Pages ให้อัตโนมัติ ลิงก์เว็บไซต์จะอยู่ใน **Settings > Pages** โดยปกติมีรูปแบบ `https://ชื่อผู้ใช้.github.io/ชื่อคลัง/`
 
 เมื่อแก้ไฟล์แล้วส่งขึ้น branch `main` อีกครั้ง เว็บไซต์จะอัปเดตให้อัตโนมัติ ไฟล์ทั้งหมดใน repository นี้จะเปิดดูได้สาธารณะด้วย
 
