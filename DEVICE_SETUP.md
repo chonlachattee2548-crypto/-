@@ -65,9 +65,11 @@ Worker ใช้ HTTPS polling เพื่อให้เริ่มต้น�
 3. เปิด **Settings > Actions > General** แล้วอนุญาต workflow ให้ใช้ Actions ตามค่าเริ่มต้น
 4. เปิดแท็บ **Actions**, เลือก **เผยแพร่บริการกลาง Cloudflare**, แล้วกด **Run workflow**
 5. สร้างค่าสุ่มสำหรับโทเคนบอร์ดด้วย `py -c "import secrets; print(secrets.token_urlsafe(32))"` แล้วใน Cloudflare Dashboard ของ Worker `jewelry-gemstone-control` เพิ่ม Worker secrets ชื่อ `DEVICE_TOKEN` และ `TURNSTILE_SECRET` เก็บค่าโทเคนไว้ในที่ปลอดภัยและห้าม commit ลง GitHub
-6. สร้าง Turnstile widget สำหรับ `chonlachattee2548-crypto.github.io` และเพิ่ม site key ใน `device-config.js` (site key เป็นค่าที่เปิดเผยต่อหน้าเว็บได้ แต่ secret key ต้องอยู่ใน Worker เท่านั้น)
-7. นำ URL `workers.dev` ที่ได้จาก Cloudflare มาใส่ใน `apiBase` ของ `device-config.js` แล้วส่ง commit ขึ้น GitHub
+6. สร้าง Turnstile widget สำหรับ `chonlachattee2548-crypto.github.io` แล้วเพิ่ม Repository secret ชื่อ `TURNSTILE_SITE_KEY` ใน GitHub โดยใส่ Site key ของ widget
+7. Workflow GitHub Pages จะสร้าง `device-config.js` ระหว่างเผยแพร่ โดยตั้ง URL Worker และ Site key จาก Secret ให้เอง ไฟล์ที่เผยแพร่มี Site key ให้เบราว์เซอร์ใช้งาน แต่ค่านี้เป็น public key และไม่ใช่รหัสลับ
 8. คง `REMOTE_CONTROL_ENABLED = "false"` ไว้จนกว่าจะทดสอบการต่อสาย การหยุดมอเตอร์ และโปรไฟล์หมุนกับอุปกรณ์จริงครบ
+
+ห้ามใส่ Turnstile Secret key, Cloudflare API Token หรือ DEVICE_TOKEN ในโค้ดหน้าเว็บ ไฟล์ตั้งค่าเว็บไซต์ หรือ commit ลง GitHub ให้เก็บ Turnstile Secret key และ DEVICE_TOKEN เป็น Worker secrets ส่วน Cloudflare API Token ให้เก็บใน GitHub Actions secrets เท่านั้น
 
 ก่อนเปิดระบบจริง ให้ตรวจว่า Turnstile ทำงาน, บอร์ดรับเฉพาะคำสั่งที่อนุญาต, มอเตอร์หยุดเองได้เมื่อ Wi-Fi หลุดหรือคำสั่งค้าง และมีวิธีตัดไฟฉุกเฉิน การ timeout ฝั่ง Worker ไม่สามารถรับประกันการหยุดมอเตอร์ที่กำลังหมุนได้
 

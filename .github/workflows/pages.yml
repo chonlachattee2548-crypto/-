@@ -24,6 +24,22 @@ jobs:
     steps:
       - name: ดาวน์โหลดไฟล์โครงการ
         uses: actions/checkout@v4
+      - name: สร้างค่าตั้งค่าเว็บไซต์จาก Secret
+        env:
+          TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+
+          const config = {
+            apiBase: "https://jewelry-gemstone-control.chonlachat-tee2548.workers.dev",
+            turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || ""
+          };
+          writeFileSync(
+            "device-config.js",
+            `"use strict";\n\nwindow.GEMSTONE_DEVICE_CONFIG = Object.freeze(${JSON.stringify(config, null, 2)});\n`
+          );
+          NODE
       - name: ตั้งค่า GitHub Pages
         uses: actions/configure-pages@v5
       - name: เตรียมไฟล์เว็บไซต์
