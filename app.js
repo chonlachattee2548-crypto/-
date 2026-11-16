@@ -808,6 +808,87 @@ function dashboardReportData(report, rangeEvents) {
   return { rows: [...grouped.values()].sort((a, b) => b.count - a.count), label: "จำนวนครั้งเปิดดูสินค้า", empty: "ไม่มีข้อมูลการเปิดดูสินค้าในช่วงเวลาที่เลือก" };
 }
 
+function reportTrend(report, start, end, rangeEvents) {
+  const eventType = report === "pir" ? "pir" : "visit";
+  const startTime = new Date(`${start}T12:00:00+07:00`).getTime();
+  const endTime = new Date(`${end}T12:00:00+07:00`).getTime();
+  const dayCount = Math.max(1, Math.round((endTime - startTime) / 86_400_000) + 1);
+  const bucketCount = Math.min(dayCount, 30);
+  const buckets = Array.from({ length: bucketCount }, (_, index) => ({
+    label: new Intl.DateTimeFormat("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "short" })
+      .format(new Date(startTime + Math.floor(index * dayCount / bucketCount) * 86_400_000)),
+    count: 0
+  }));
+  rangeEvents.filter((event) => event.type === eventType).forEach((event) => {
+    const eventTime = new Date(event.occurredAt).getTime();
+    const dayIndex = Math.floor((eventTime - startTime) / 86_400_000);
+    if (dayIndex < 0 || dayIndex >= dayCount) return;
+    const bucketIndex = Math.min(bucketCount - 1, Math.floor(dayIndex * bucketCount / dayCount));
+    buckets[bucketIndex].count += 1;
+  });
+  return buckets;
+}
+
+function renderTrendChart(report, start, end, rangeEvents) {
+  const buckets = reportTrend(report, start, end, rangeEvents);
+  const width = 760;
+  const height = 270;
+  const left = 44;
+  const right = 744;
+  const top = 24;
+  const bottom = 210;
+  const max = Math.max(1, ...buckets.map((bucket) => bucket.count));
+  const points = buckets.map((bucket, index) => ({
+    x: left + (buckets.length === 1 ? 0 : index * (right - left) / (buckets.length - 1)),
+    y: bottom - bucket.count / max * (bottom - top),
+    ...bucket
+  }));
+  const line = points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+  const area = `${line} L${right},${bottom} L${left},${bottom} Z`;
+  const yLabels = new Set();
+  const grid = Array.from({ length: 4 }, (_, index) => {
+    const y = top + index * (bottom - top) / 3;
+    const value = buckets.every((bucket) => bucket.count === 0) ? 0 : Math.round(max * (3 - index) / 3);
+    const label = yLabels.has(value) ? "" : `<text x="${left - 12}" y="${y + 4}" text-anchor="end">${value}</text>`;
+    yLabels.add(value);
+    return `<g class="chart-gridline"><line x1="${left}" y1="${y}" x2="${right}" y2="${y}"></line>${label}</g>`;
+  }).join("");
+  const labelIndexes = [...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])];
+  const labels = labelIndexes.map((index) => {
+    const point = points[index];
+    return `<text class="chart-axis-label" x="${point.x}" y="${bottom + 27}" text-anchor="${index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}">${escapeHtml(point.label)}</text>`;
+  }).join("");
+  const markers = points.map((point) => `<circle class="chart-point" cx="${point.x}" cy="${point.y}" r="${points.length > 30 ? 2 : 3}"><title>${escapeHtml(point.label)}: ${point.count} ${report === "pir" ? "เหตุการณ์" : "ครั้งเข้าชม"}</title></circle>`).join("");
+  const title = report === "pir" ? "แนวโน้มการตรวจจับการเคลื่อนไหว" : "แนวโน้มการเข้าชมเว็บไซต์";
+  return `<figure class="report-chart">
+    <figcaption class="chart-heading"><div><h2>${title}</h2><p>รวม ${points.reduce((total, point) => total + point.count, 0).toLocaleString("th-TH")} ${report === "pir" ? "เหตุการณ์" : "ครั้ง"} ในช่วงที่เลือก</p></div><span class="chart-legend"><i aria-hidden="true"></i>${report === "pir" ? "การตรวจจับ" : "การเข้าชม"}</span></figcaption>
+    <svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="trend-chart-title trend-chart-desc" preserveAspectRatio="none">
+      <title id="trend-chart-title">${title}</title><desc id="trend-chart-desc">กราฟแสดงจำนวน${report === "pir" ? "การตรวจจับการเคลื่อนไหว" : "การเข้าชมเว็บไซต์"} แบ่ง ${buckets.length} ช่วงตามวันที่เลือก</desc>
+      ${grid}<path class="chart-area" d="${area}"></path><path class="chart-line" d="${line}"></path>${markers}${labels}
+    </svg>
+    ${points.every((point) => point.count === 0) ? `<p class="chart-empty">ยังไม่มีข้อมูลในช่วงวันที่นี้ กราฟจะแสดงเมื่อมีการบันทึกเหตุการณ์</p>` : ""}
+  </figure>`;
+}
+
+function renderInventoryChart() {
+  const items = products().slice().sort((a, b) => Number(b.stock) - Number(a.stock)).slice(0, 6);
+  if (!items.length) return emptyState("ยังไม่มีสินค้า", "เพิ่มรายการสินค้าเพื่อดูสต็อกในกราฟ");
+  const max = Math.max(1, ...items.map((item) => Number(item.stock) || 0));
+  const width = 760;
+  const rowHeight = 42;
+  const labelWidth = 160;
+  const valueWidth = 50;
+  const chartWidth = width - labelWidth - valueWidth - 24;
+  const rows = items.map((item, index) => {
+    const y = index * rowHeight + 8;
+    const value = Math.max(0, Number(item.stock) || 0);
+    const barWidth = value / max * chartWidth;
+    const fillClass = value === 0 ? "inventory-bar inventory-bar-empty" : "inventory-bar";
+    return `<g><title>${escapeHtml(item.name)}: ${value} ชิ้น</title><text class="inventory-label" x="0" y="${y + 15}">${escapeHtml(item.name.slice(0, 18))}</text><rect class="inventory-track" x="${labelWidth}" y="${y}" width="${chartWidth}" height="20" rx="4"></rect><rect class="${fillClass}" x="${labelWidth}" y="${y}" width="${barWidth}" height="20" rx="4"></rect><text class="inventory-value" x="${labelWidth + chartWidth + 12}" y="${y + 15}">${value}</text></g>`;
+  }).join("");
+  return `<figure class="report-chart inventory-chart"><figcaption class="chart-heading"><div><h2>จำนวนคงเหลือแยกตามสินค้า</h2><p>แสดงสินค้า ${items.length} รายการที่มีจำนวนคงเหลือสูงสุด</p></div><span class="chart-legend"><i aria-hidden="true"></i>คงเหลือ (ชิ้น)</span></figcaption><svg viewBox="0 0 ${width} ${items.length * rowHeight}" role="img" aria-label="กราฟจำนวนคงเหลือแยกตามสินค้า">${rows}</svg></figure>`;
+}
+
 function dashboardPage() {
   if (currentUser?.role !== "admin") {
     navigate(currentUser ? "home" : "login");
@@ -822,7 +903,7 @@ function dashboardPage() {
   const reportLabels = [["pir", "การเคลื่อนไหว"], ["inventory", "สินค้าและสต็อก"], ["visits", "การเข้าชมเว็บไซต์"], ["views", "สินค้าที่ได้รับความสนใจ"], ["member-history", "ประวัติสมาชิก"]];
   const memberList = users().filter((user) => user.role === "member");
   return `<div class="container"><div class="admin-shell">${adminNav("dashboard")}
-    <section class="admin-content"><p class="eyebrow">ผู้ดูแลระบบ · รายงาน DB-01 ถึง DB-05</p><h1>แดชบอร์ด</h1><p class="lede">สรุปข้อมูลที่บันทึกไว้จริงในเดโม และแสดงเวลาอ้างอิงประเทศไทย</p>
+    <section class="admin-content"><p class="eyebrow">ผู้ดูแลระบบ · รายงาน DB-01 ถึง DB-05</p><h1>แดชบอร์ด</h1><p class="lede">สรุปข้อมูลเดโมที่บันทึกไว้ในเบราว์เซอร์เครื่องนี้ · เวลาอ้างอิงประเทศไทย</p>
       <div class="metric-grid">
         <div class="metric"><span>รายการสินค้า</span><strong>${stock.count}</strong></div>
         <div class="metric"><span>คงเหลือรวม (ชิ้น)</span><strong>${stock.stock}</strong></div>
@@ -862,11 +943,10 @@ function renderReportContent(report, start, end, memberId) {
     return `<div class="metric-grid">
       <div class="metric"><span>รายการสินค้า</span><strong>${data.count}</strong></div><div class="metric"><span>คงเหลือรวม (ชิ้น)</span><strong>${data.stock}</strong></div>
       <div class="metric"><span>สินค้าหมด</span><strong>${data.out}</strong></div><div class="metric"><span>สินค้าใกล้หมด</span><strong>${data.low}</strong></div>
-    </div>${data.empty ? `<div class="notice notice-info">${escapeHtml(data.empty)}</div>` : `<p class="field-hint">ยอดคงเหลือและเกณฑ์ใกล้หมดอ้างอิงจากรายการที่ผู้ดูแลบันทึกไว้ แต่ละสินค้าใช้เกณฑ์ของตนเอง</p>`}`;
+    </div>${data.empty ? `<div class="notice notice-info">${escapeHtml(data.empty)}</div>` : `<p class="field-hint">ยอดคงเหลือและเกณฑ์ใกล้หมดอ้างอิงจากรายการที่ผู้ดูแลบันทึกไว้ แต่ละสินค้าใช้เกณฑ์ของตนเอง</p>${renderInventoryChart()}`}`;
   }
   if (report === "pir" || report === "visits") {
-    if (!data.count) return emptyState(report === "pir" ? "ไม่มีข้อมูลการตรวจจับการเคลื่อนไหว" : "ไม่มีข้อมูลการเข้าชม", data.empty);
-    return `<div class="metric"><span>${escapeHtml(data.label)}</span><strong>${data.count}</strong></div>`;
+    return `<div class="metric"><span>${escapeHtml(data.label)}</span><strong>${data.count.toLocaleString("th-TH")}</strong></div>${renderTrendChart(report, start, end, list)}`;
   }
   if (!data.rows.length) return emptyState("ไม่มีข้อมูลการเปิดดูสินค้า", data.empty);
   const max = data.rows[0].count;
