@@ -1,0 +1,1087 @@
+"use strict";
+
+const STORAGE = {
+  products: "jgs.products.v1",
+  users: "jgs.users.v1",
+  events: "jgs.events.v1",
+  content: "jgs.content.v1",
+  login: "jgs.login.v1"
+};
+const SESSION_USER = "jgs.session.user";
+const SESSION_ID = "jgs.session.id";
+const DEMO_ADMIN = "admin@gemstone.demo";
+const DEMO_PASSWORD = "GemstoneDemo1!";
+const defaultProducts = [
+  { id: "emerald-01", code: "EM-001", name: "มงกุฎเขียว", type: "Emerald", color: "emerald", cut: "Oval", origin: "โคลอมเบีย", price: 4250, stock: 3, lowStock: 2, published: true, description: "มรกตสีเขียวสดเฉดพฤกษา เจียระไนวงรีอย่างสมดุลและมีประกายเป็นธรรมชาติ", images: [] },
+  { id: "sapphire-01", code: "SA-014", name: "สายน้ำรัตติกาล", type: "Sapphire", color: "sapphire", cut: "Cushion", origin: "ศรีลังกา", price: 3180, stock: 5, lowStock: 2, published: true, description: "ไพลินสีน้ำเงินเข้มที่เผยเฉดสีแตกต่างอย่างนุ่มนวลเมื่อกระทบแสง", images: [] },
+  { id: "ruby-01", code: "RU-008", name: "บทกวีสีชาด", type: "Ruby", color: "ruby", cut: "Round", origin: "เมียนมา", price: 5720, stock: 0, lowStock: 1, published: true, description: "ทับทิมสีแดงอบอุ่น เจียระไนทรงกลมคลาสสิกพร้อมประกายสว่างตรงกลาง", images: [] },
+  { id: "amethyst-01", code: "AM-022", name: "โมงยามสีม่วง", type: "Amethyst", color: "amethyst", cut: "Pear", origin: "บราซิล", price: 780, stock: 11, lowStock: 4, published: true, description: "อะเมทิสต์สีลาเวนเดอร์นุ่มนวล เจียระไนทรงหยดน้ำที่รับแสงได้อย่างงดงาม", images: [] },
+  { id: "spinel-01", code: "SP-005", name: "กุหลาบกลางฟ้า", type: "Spinel", color: "spinel", cut: "Cushion", origin: "แทนซาเนีย", price: 2460, stock: 2, lowStock: 3, published: true, description: "สปิเนลสีชมพูกุหลาบ เนื้อใสและเจียระไนทรงคุชชั่นอย่างประณีต", images: [] },
+  { id: "topaz-01", code: "TP-019", name: "ฟ้าใสสงบนิ่ง", type: "Topaz", color: "topaz", cut: "Oval", origin: "ไนจีเรีย", price: 940, stock: 8, lowStock: 3, published: true, description: "โทแพซสีฟ้าใสให้ความรู้สึกสงบ พร้อมรูปทรงวงรีที่สวมใส่ง่าย", images: [] },
+  { id: "tourmaline-01", code: "TM-011", name: "ม่านพฤกษา", type: "Tourmaline", color: "tourmaline", cut: "Emerald", origin: "โมซัมบิก", price: 1850, stock: 1, lowStock: 2, published: true, description: "ทัวร์มาลีนสีเขียวป่าลึกกับเหลี่ยมเจียระไนเรขาคณิตที่คมชัด", images: [] },
+  { id: "citrine-01", code: "CI-027", name: "แสงแรกสีทอง", type: "Citrine", color: "citrine", cut: "Oval", origin: "มาดากัสการ์", price: 640, stock: 6, lowStock: 2, published: true, description: "ซิทรินสีทองสว่าง ขัดเงาและเจียระไนทรงวงรีแบบคลาสสิก", images: [] }
+];
+const gemPalettes = {
+  emerald: ["#83d0a6", "#237650", "#123e32", "#d9f6e8"],
+  sapphire: ["#a9d8f6", "#3672bb", "#172e68", "#e2f5ff"],
+  ruby: ["#ffb0a7", "#bd3148", "#74172d", "#ffe4df"],
+  amethyst: ["#e2c9ff", "#9463cb", "#503478", "#f7eaff"],
+  spinel: ["#ffc5d4", "#d35783", "#852e59", "#ffeaf1"],
+  topaz: ["#b6eff2", "#42a9be", "#17677c", "#e8ffff"],
+  tourmaline: ["#acd9a0", "#4c8f59", "#214d3d", "#eaffdc"],
+  citrine: ["#ffe29a", "#d69a36", "#895818", "#fff4d2"],
+  garnet: ["#f0a8a8", "#a53d52", "#641d36", "#ffe8e5"],
+  opal: ["#bde6ee", "#75a9bc", "#53699d", "#f3fbff"]
+};
+const gemTypeLabels = {
+  Emerald: "มรกต",
+  Sapphire: "ไพลิน",
+  Ruby: "ทับทิม",
+  Amethyst: "อะเมทิสต์",
+  Spinel: "สปิเนล",
+  Topaz: "โทแพซ",
+  Tourmaline: "ทัวร์มาลีน",
+  Citrine: "ซิทริน",
+  Garnet: "การ์เนต",
+  Opal: "โอปอล"
+};
+const gemCutLabels = {
+  Oval: "วงรี",
+  Cushion: "คุชชั่น",
+  Round: "กลม",
+  Pear: "หยดน้ำ",
+  Emerald: "เอเมอรัลด์"
+};
+const gemColorLabels = {
+  emerald: "เขียวมรกต",
+  sapphire: "น้ำเงินไพลิน",
+  ruby: "แดงทับทิม",
+  amethyst: "ม่วงอะเมทิสต์",
+  spinel: "ชมพูกุหลาบ",
+  topaz: "ฟ้าโทแพซ",
+  tourmaline: "เขียวทัวร์มาลีน",
+  citrine: "เหลืองซิทริน",
+  garnet: "แดงการ์เนต",
+  opal: "สีรุ้งโอปอล"
+};
+
+const app = document.querySelector("#app");
+const dialog = document.querySelector("#app-dialog");
+const dialogContent = document.querySelector("#dialog-content");
+const toastRegion = document.querySelector("#toast-region");
+let currentUser = null;
+let currentRoute = "home";
+let currentReport = "pir";
+let currentDetailImage = 0;
+let catalogQuery = "";
+let catalogType = "";
+let catalogAvailability = "";
+let adminSearch = "";
+
+function readStore(key, fallback) {
+  const raw = localStorage.getItem(key);
+  return raw === null ? fallback : JSON.parse(raw);
+}
+
+function writeStore(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "QuotaExceededError") {
+      throw new Error("พื้นที่จัดเก็บข้อมูลของเบราว์เซอร์เต็ม โปรดลบรูปภาพบางรายการหรือคืนค่าข้อมูลเดโมแล้วลองอีกครั้ง");
+    }
+    throw error;
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[char]);
+}
+
+function uuid() {
+  return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function hashPassword(value) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function initialize() {
+  if (!localStorage.getItem(STORAGE.products)) writeStore(STORAGE.products, defaultProducts);
+  if (!localStorage.getItem(STORAGE.events)) writeStore(STORAGE.events, []);
+  if (!localStorage.getItem(STORAGE.content)) {
+    writeStore(STORAGE.content, {
+      headline: "ใกล้ชิดอัญมณีล้ำค่าแห่งธรรมชาติ",
+      intro: "ค้นพบอัญมณีที่คัดสรรจากเอกลักษณ์ สีสัน และประกายที่งดงามเฉพาะตัว"
+    });
+  }
+  if (!localStorage.getItem(STORAGE.login)) writeStore(STORAGE.login, {});
+
+  const users = readStore(STORAGE.users, null);
+  if (!users) {
+    const adminHash = await hashPassword(DEMO_PASSWORD);
+    writeStore(STORAGE.users, [{
+      id: "demo-admin",
+      username: "ผู้ดูแลระบบ",
+      email: DEMO_ADMIN,
+      passwordHash: adminHash,
+      role: "admin",
+      failedAttempts: 0,
+      lockedUntil: 0,
+      createdAt: new Date().toISOString()
+    }]);
+  }
+
+  currentUser = getSessionUser();
+  trackVisit();
+  render();
+}
+
+function products() {
+  return readStore(STORAGE.products, []);
+}
+
+function users() {
+  return readStore(STORAGE.users, []);
+}
+
+function events() {
+  return readStore(STORAGE.events, []);
+}
+
+function getSessionUser() {
+  const id = sessionStorage.getItem(SESSION_USER);
+  if (!id) return null;
+  return users().find((user) => user.id === id) || null;
+}
+
+function sessionId() {
+  let value = sessionStorage.getItem(SESSION_ID);
+  if (!value) {
+    value = uuid();
+    sessionStorage.setItem(SESSION_ID, value);
+  }
+  return value;
+}
+
+function recordEvent(type, extra = {}) {
+  const list = events();
+  list.push({
+    id: uuid(),
+    type,
+    sessionId: sessionId(),
+    occurredAt: new Date().toISOString(),
+    ...(currentUser?.role === "member" ? { memberId: currentUser.id } : {}),
+    ...extra
+  });
+  writeStore(STORAGE.events, list);
+}
+
+function trackVisit() {
+  if (sessionStorage.getItem("jgs.visit.recorded")) return;
+  recordEvent("visit");
+  sessionStorage.setItem("jgs.visit.recorded", "1");
+}
+
+function formatPrice(value) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "THB", maximumFractionDigits: 0 }).format(value);
+}
+
+function formatDate(value, options = {}) {
+  return new Intl.DateTimeFormat("th-TH", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    ...options
+  }).format(new Date(value));
+}
+
+function dateInThailand(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(value);
+  const part = (type) => parts.find((item) => item.type === type).value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function daysAgoInThailand(days) {
+  return dateInThailand(new Date(Date.now() - days * 86400000));
+}
+
+function paletteFor(product, variant = 0) {
+  const colors = gemPalettes[product.color] || gemPalettes.emerald;
+  if (!variant) return colors;
+  return [...colors.slice(variant % 4), ...colors.slice(0, variant % 4)];
+}
+
+function gemSvg(product, variant = 0) {
+  const [light, mid, deep, gleam] = paletteFor(product, variant);
+  const title = escapeHtml(product.name || "Gemstone");
+  const id = `gem-${String(product.id || "sample").replace(/[^a-zA-Z0-9_-]/g, "")}-${variant}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 260" role="img" aria-label="${title}">
+    <defs>
+      <linearGradient id="${id}-main" x1="0" y1="0" x2="1" y2="1">
+        <stop stop-color="${light}"/><stop offset=".48" stop-color="${mid}"/><stop offset="1" stop-color="${deep}"/>
+      </linearGradient>
+      <linearGradient id="${id}-edge" x1="0" y1="0" x2="0" y2="1">
+        <stop stop-color="${gleam}" stop-opacity=".85"/><stop offset="1" stop-color="${deep}" stop-opacity=".8"/>
+      </linearGradient>
+    </defs>
+    <ellipse cx="151" cy="219" rx="83" ry="13" fill="#16342d" opacity=".11"/>
+    <path d="M92 59 119 35h62l29 24 31 64-91 115-91-115z" fill="url(#${id}-main)" stroke="${deep}" stroke-opacity=".42" stroke-width="2"/>
+    <path d="M92 59 119 35 150 81Z" fill="${gleam}" opacity=".82"/>
+    <path d="M119 35h62l-31 46Z" fill="${light}" opacity=".72"/>
+    <path d="M181 35 210 59 150 81Z" fill="${mid}" opacity=".62"/>
+    <path d="M92 59 150 81 59 123Z" fill="${light}" opacity=".42"/>
+    <path d="M210 59 241 123 150 81Z" fill="${gleam}" opacity=".5"/>
+    <path d="M59 123 150 81v42Z" fill="${deep}" opacity=".24"/>
+    <path d="M150 81 241 123h-91Z" fill="${mid}" opacity=".38"/>
+    <path d="M59 123h91v115Z" fill="${light}" opacity=".38"/>
+    <path d="M150 123h91l-91 115Z" fill="${deep}" opacity=".42"/>
+    <path d="M92 59 119 35h62l29 24 31 64-91 115-91-115z" fill="none" stroke="url(#${id}-edge)" stroke-width="2.4" stroke-linejoin="round"/>
+    <path d="M119 35 150 81l31-46M92 59l58 22 60-22M59 123h182M150 81v157M59 123l91 42 91-42M59 123l91-42 91 42" fill="none" stroke="url(#${id}-edge)" stroke-width="2" stroke-linejoin="round"/>
+    <path d="m105 65 34 12m41-31 16 15" stroke="#fff" stroke-opacity=".62" stroke-width="4" stroke-linecap="round"/>
+  </svg>`;
+}
+
+function gemImage(product, variant = 0, extraClass = "") {
+  const svg = encodeURIComponent(gemSvg(product, variant));
+  return `<img class="${escapeHtml(extraClass)}" src="data:image/svg+xml,${svg}" alt="${escapeHtml(product.name)}">`;
+}
+
+function brandMark() {
+  return `<svg class="brand-mark" viewBox="0 0 32 36" aria-hidden="true">
+    <path d="m7 4 9-2 9 2 5 9-14 21L2 13z" fill="none" stroke="currentColor" stroke-width="1.7"/>
+    <path d="m7 4 9 7 9-7m-23 9h28M16 11v21m-9-28 9 7 7-7m-16 9 9 21 9-21" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".8"/>
+  </svg>`;
+}
+
+function header() {
+  const admin = currentUser?.role === "admin";
+  const loggedIn = Boolean(currentUser);
+  const active = currentRoute.startsWith("product/") ? "catalog" : currentRoute;
+  const nav = admin
+    ? `<a href="#admin" ${active === "admin" ? 'aria-current="page"' : ""}>สินค้า</a>
+       <a href="#admin/content">เนื้อหาเว็บไซต์</a>
+       <a href="#dashboard" ${active === "dashboard" ? 'aria-current="page"' : ""}>แดชบอร์ด</a>`
+    : `<a href="#catalog" ${active === "catalog" ? 'aria-current="page"' : ""}>แคตตาล็อก</a>
+       <a href="#live" ${active === "live" ? 'aria-current="page"' : ""}>ตู้โชว์อัญมณี</a>`;
+  const accountAction = loggedIn
+    ? `<button class="button button-quiet" data-action="logout">ออกจากระบบ</button>`
+    : `<a class="button button-secondary" href="#login">เข้าสู่ระบบ</a><a class="button button-primary" href="#register">สมัครสมาชิก</a>`;
+  return `<a class="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="#home" aria-label="หน้าแรกอัญมณี อเทลิเยร์">${brandMark()}<span class="brand-name">อัญมณี อเทลิเยร์</span></a>
+        <button class="nav-toggle icon-button" data-action="toggle-nav" aria-label="เปิดเมนูนำทาง" aria-expanded="false">☰</button>
+        <nav class="main-nav" id="main-nav" aria-label="เมนูหลัก">${nav}</nav>
+        <div class="header-actions">${accountAction}</div>
+      </div>
+    </header>`;
+}
+
+function footer() {
+  return `<footer class="site-footer"><div class="footer-inner">
+    <span>© ${new Date().getFullYear()} อัญมณี อเทลิเยร์ · เรื่องราวของอัญมณีจากธรรมชาติ</span>
+    <nav class="footer-links" aria-label="เมนูท้ายหน้า">
+      <a href="#catalog">คอลเลกชัน</a><a href="#live">ตู้โชว์</a>
+      ${currentUser?.role === "admin" ? '<a href="#dashboard">รายงาน</a>' : ""}
+    </nav>
+  </div></footer>`;
+}
+
+function shell(content, options = {}) {
+  const admin = options.admin || false;
+  document.documentElement.lang = "th";
+  app.innerHTML = `${header()}<main id="main-content" tabindex="-1">${content}</main>${footer()}`;
+}
+
+function publishedProducts() {
+  return products().filter((product) => product.published);
+}
+
+function productStatus(product) {
+  return Number(product.stock) > 0
+    ? '<span class="status-pill status-available">มีสินค้า</span>'
+    : '<span class="status-pill status-out">สินค้าหมด</span>';
+}
+
+function productCard(product) {
+  return `<article class="gem-card">
+    <a href="#product/${encodeURIComponent(product.id)}" class="gem-art" style="--gem-bg:${gemPalettes[product.color]?.[3] || "#edf5f2"}" aria-label="ดู ${escapeHtml(product.name)}">${gemImage(product)}</a>
+    <div class="gem-card-body">
+      <div class="gem-meta"><span>${escapeHtml(gemTypeLabels[product.type] || product.type)} · เจียระไน${escapeHtml(gemCutLabels[product.cut] || product.cut)}</span>${productStatus(product)}</div>
+      <h3><a href="#product/${encodeURIComponent(product.id)}">${escapeHtml(product.name)}</a></h3>
+      <div class="gem-card-bottom"><span class="gem-price">${formatPrice(Number(product.price))}<small>ต่อกรัม · บาท/กรัม</small></span>
+        <a class="button button-quiet button-small" href="#product/${encodeURIComponent(product.id)}">ดูอัญมณี <span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+  </article>`;
+}
+
+function homePage() {
+  const content = readStore(STORAGE.content, { headline: defaultProducts[0].name, intro: "" });
+  const featured = publishedProducts().slice(0, 4);
+  return `<div class="container">
+    <section class="hero" aria-labelledby="home-title">
+      <div class="hero-copy">
+        <p class="eyebrow">คอลเลกชันอัญมณีธรรมชาติที่คัดสรรอย่างตั้งใจ</p>
+        <h1 id="home-title">${escapeHtml(content.headline)}</h1>
+        <p>${escapeHtml(content.intro)}</p>
+        <div class="hero-actions"><a class="button button-primary" href="#catalog">ชมคอลเลกชัน <span aria-hidden="true">↗</span></a>
+          <a class="button button-secondary" href="#live">เข้าชมตู้โชว์อัญมณี</a></div>
+      </div>
+      <div class="hero-art">${gemImage({ id: "atelier-hero", name: "อัญมณีสีเขียวเจียระไน", color: "emerald" })}</div>
+      <span class="hero-note">อัญมณีทุกชิ้นมีเรื่องราวเฉพาะตัว</span>
+    </section>
+    <section class="feature-row section-space" aria-label="แนวทางการคัดสรร">
+      <div class="feature"><span class="feature-symbol" aria-hidden="true">✦</span><strong>คัดสรรอย่างพิถีพิถัน</strong><span>เลือกอัญมณีจากเอกลักษณ์และสีสันที่โดดเด่น</span></div>
+      <div class="feature"><span class="feature-symbol" aria-hidden="true">◈</span><strong>เลือกชมได้ตามต้องการ</strong><span>ดูรายละเอียดและสถานะสินค้าได้โดยไม่ต้องสมัคร</span></div>
+      <div class="feature"><span class="feature-symbol" aria-hidden="true">◎</span><strong>ชมบรรยากาศในตู้โชว์</strong><span>ติดตามการจัดแสดงอัญมณีภายในร้าน</span></div>
+    </section>
+    <section class="section-space" aria-labelledby="featured-title">
+      <div class="section-heading"><div><p class="eyebrow">จากคอลเลกชัน</p><h2 id="featured-title">อัญมณีที่ชวนให้ชมใกล้ ๆ</h2></div>
+        <a class="button button-secondary" href="#catalog">ดูอัญมณีทั้งหมด <span aria-hidden="true">→</span></a></div>
+      <div class="collection-grid">${featured.length ? featured.map(productCard).join("") : emptyState("ยังไม่มีอัญมณีเผยแพร่", "อัญมณีใหม่จะแสดงที่นี่เมื่อมีการอัปเดตคอลเลกชัน")}</div>
+    </section>
+    <section class="story-band section-space">
+      <div><p class="eyebrow">ภายในตู้โชว์</p><h2>ชมประกายอัญมณีจากทุกเหลี่ยมมุม</h2><p>เข้าชมตู้โชว์และตรวจสอบสถานะกล้องกับแท่นหมุนได้อย่างชัดเจน หากอุปกรณ์ยังไม่เชื่อมต่อ ระบบจะแจ้งสถานะตามจริง</p>
+        <div class="hero-actions"><a class="button button-primary" href="#live">เปิดหน้าตู้โชว์</a></div>
+      </div>
+      <svg class="story-mark" viewBox="0 0 220 190" role="img" aria-label="ภาพประกอบอัญมณีรูปทรงเรขาคณิต">
+        <path d="m47 38 26-23h74l27 23 32 50-73 89L60 88z" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="m47 38 63 23 64-23m-127 50h146m-127 0 18 73 26-62 26 62 18-73m-44-27v89M73 15l37 46 37-46" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".8"/>
+      </svg>
+    </section>
+  </div>`;
+}
+
+function emptyState(title, message) {
+  return `<div class="empty-state"><strong>${escapeHtml(title)}</strong>${escapeHtml(message)}</div>`;
+}
+
+function catalogPage() {
+  const types = [...new Set(publishedProducts().map((product) => product.type))].sort();
+  let filtered = publishedProducts().filter((product) => {
+    const queryMatch = !catalogQuery || `${product.name} ${product.type} ${product.code} ${product.origin}`.toLowerCase().includes(catalogQuery.toLowerCase());
+    const typeMatch = !catalogType || product.type === catalogType;
+    const availableMatch = !catalogAvailability || (catalogAvailability === "available" ? Number(product.stock) > 0 : Number(product.stock) === 0);
+    return queryMatch && typeMatch && availableMatch;
+  });
+  const noProducts = publishedProducts().length === 0;
+  return `<div class="container">
+    <div class="section-heading"><div><p class="eyebrow">คอลเลกชันอัญมณี</p><h1>แคตตาล็อกอัญมณี</h1><p class="lede">ชมอัญมณีธรรมชาติ พร้อมข้อมูลสี การเจียระไน และเอกลักษณ์ของแต่ละชิ้น</p></div></div>
+    <form class="toolbar" id="catalog-search">
+      <label class="search-field"><span class="visually-hidden">ค้นหาอัญมณี</span><span class="search-icon" aria-hidden="true">⌕</span>
+        <input class="form-control" name="query" type="search" value="${escapeHtml(catalogQuery)}" placeholder="ค้นหาจากชื่อ ประเภท แหล่งกำเนิด หรือรหัส">
+      </label>
+      <div class="filter-row">
+        <label><span class="visually-hidden">กรองตามประเภทอัญมณี</span><select class="form-control" name="type">
+          <option value="">อัญมณีทั้งหมด</option>${types.map((type) => `<option value="${escapeHtml(type)}" ${catalogType === type ? "selected" : ""}>${escapeHtml(gemTypeLabels[type] || type)}</option>`).join("")}
+        </select></label>
+        <label><span class="visually-hidden">กรองตามสถานะสินค้า</span><select class="form-control" name="availability">
+          <option value="">สถานะทั้งหมด</option><option value="available" ${catalogAvailability === "available" ? "selected" : ""}>มีสินค้า</option><option value="out" ${catalogAvailability === "out" ? "selected" : ""}>สินค้าหมด</option>
+        </select></label>
+        <button class="button button-primary" type="submit">ค้นหา</button>
+        <button class="button button-secondary" type="button" data-action="clear-filters">ล้างตัวกรอง</button>
+      </div>
+    </form>
+    <p class="result-count" role="status">${noProducts ? "กำลังเตรียมคอลเลกชันอัญมณี" : `พบอัญมณี ${filtered.length} รายการ`}</p>
+    <div class="collection-grid">${noProducts ? emptyState("ยังไม่มีอัญมณีเผยแพร่", "โปรดกลับมาตรวจสอบอีกครั้งหลังอัปเดตคอลเลกชัน") : filtered.length ? filtered.map(productCard).join("") : emptyState("ไม่พบอัญมณีตามเงื่อนไข", "ลองเปลี่ยนคำค้นหา หรือล้างตัวกรองบางรายการ")}</div>
+  </div>`;
+}
+
+function detailPage(productId) {
+  const product = publishedProducts().find((item) => item.id === productId);
+  if (!product) {
+    return `<div class="container">${emptyState("ไม่พบอัญมณีรายการนี้", "อัญมณีอาจถูกนำออกจากคอลเลกชัน ลองเลือกดูอัญมณีรายการอื่น")}<p class="hero-actions"><a class="button button-primary" href="#catalog">กลับไปแคตตาล็อก</a></p></div>`;
+  }
+  const viewed = JSON.parse(sessionStorage.getItem("jgs.viewed.products") || "[]");
+  if (!viewed.includes(product.id)) {
+    recordEvent("product_view", { productId: product.id });
+    if (currentUser?.role === "member") {
+      const history = readStore("jgs.member.history.v1", []);
+      history.push({ memberId: currentUser.id, productId: product.id, occurredAt: new Date().toISOString(), eventId: events().at(-1).id });
+      writeStore("jgs.member.history.v1", history);
+    }
+    sessionStorage.setItem("jgs.viewed.products", JSON.stringify([...viewed, product.id]));
+  }
+  const images = Array.isArray(product.images) ? product.images : [];
+  const thumbnails = Math.max(1, images.length);
+  const selectedPhoto = images[currentDetailImage] || null;
+  const art = selectedPhoto
+    ? `<img src="${selectedPhoto}" alt="ภาพอัญมณี ${escapeHtml(product.name)} ภาพที่ ${currentDetailImage + 1}">`
+    : gemImage(product, currentDetailImage);
+  return `<div class="container">
+    <p><a class="button button-quiet button-small" href="#catalog">← กลับไปคอลเลกชัน</a></p>
+    <section class="detail-layout" aria-labelledby="product-title">
+      <div><div class="detail-art">${art}</div>
+        ${thumbnails > 1 ? `<div class="detail-thumbs" aria-label="ภาพอัญมณี">${images.map((image, index) => `<button type="button" data-action="select-photo" data-index="${index}" aria-label="แสดงภาพที่ ${index + 1}"><img src="${image}" alt=""></button>`).join("")}</div>` : ""}
+      </div>
+      <div class="detail-copy">
+        <p class="eyebrow">${escapeHtml(gemTypeLabels[product.type] || product.type)} · ${escapeHtml(product.code)}</p><h1 id="product-title">${escapeHtml(product.name)}</h1>
+        ${productStatus(product)}
+        <p class="detail-price">${formatPrice(Number(product.price))} <small>ต่อกรัม · บาท/กรัม</small></p>
+        <p>${escapeHtml(product.description)}</p>
+        <div class="detail-facts">
+          <div class="detail-fact"><span>ประเภทอัญมณี</span><strong>${escapeHtml(gemTypeLabels[product.type] || product.type)}</strong></div>
+          <div class="detail-fact"><span>การเจียระไน</span><strong>${escapeHtml(gemCutLabels[product.cut] || product.cut)}</strong></div>
+          <div class="detail-fact"><span>สี</span><strong>${escapeHtml(gemColorLabels[product.color] || product.color)}</strong></div>
+          <div class="detail-fact"><span>แหล่งกำเนิด</span><strong>${escapeHtml(product.origin || "ไม่ระบุ")}</strong></div>
+        </div>
+        <p class="field-hint">ราคาแสดงเป็นเงินบาทต่อกรัม สถานะสินค้าคำนวณจากจำนวนคงเหลือล่าสุด</p>
+      </div>
+    </section>
+  </div>`;
+}
+
+function livePage() {
+  return `<div class="container">
+    <div class="section-heading"><div><p class="eyebrow">ชมการจัดแสดง</p><h1>ตู้โชว์อัญมณี</h1><p class="lede">ชมอัญมณีในตู้โชว์และตรวจสอบสถานะอุปกรณ์ก่อนสั่งหมุนแท่น</p></div></div>
+    <section class="live-grid" aria-label="ตู้โชว์อัญมณี">
+      <div>
+        <div class="video-panel" role="status">
+          <div class="video-empty"><div class="video-symbol" aria-hidden="true">◉</div><h2>ยังไม่ได้เชื่อมต่อภาพสด</h2>
+            <p>ต้นแบบนี้ยังไม่ได้ตั้งค่ากล้องหรือสัญญาณถ่ายทอดสด จึงไม่แสดงภาพนิ่งแทนภาพสด</p>
+            <button class="button button-secondary" type="button" data-action="retry-stream">ลองเชื่อมต่ออีกครั้ง</button>
+          </div>
+        </div>
+        <p class="live-status notice notice-info" id="stream-message">สถานะกล้อง: ไม่ได้เชื่อมต่อ · สถานะสัญญาณภาพ: ยังไม่ได้ตั้งค่า</p>
+      </div>
+      <aside class="live-controls" aria-labelledby="turntable-title">
+        <h2 id="turntable-title">ควบคุมแท่นหมุน</h2>
+        <p>ระบบจะส่งคำสั่งหมุนหนึ่งรอบต่อเมื่อกล้อง ตัวควบคุม และแท่นหมุนพร้อมใช้งาน</p>
+        <div class="device-list">
+          <div class="device-row"><span>กล้องตู้โชว์</span><span class="status-pill status-neutral">ไม่ได้เชื่อมต่อ</span></div>
+          <div class="device-row"><span>ตัวควบคุมมอเตอร์</span><span class="status-pill status-neutral">ไม่ได้เชื่อมต่อ</span></div>
+          <div class="device-row"><span>แท่นหมุน</span><span class="status-pill status-neutral">ไม่ทราบสถานะ</span></div>
+        </div>
+        <button class="button button-primary" type="button" data-action="rotate" aria-describedby="rotate-note">หมุนแท่น 360°</button>
+        <p id="rotate-note" class="showroom-note">ต้นแบบนี้ยังสั่งหมุนไม่ได้ ระบบจะไม่บันทึกคำสั่งเข้าคิวและไม่แจ้งว่าหมุนสำเร็จ</p>
+      </aside>
+    </section>
+  </div>`;
+}
+
+function authPage(mode) {
+  const isRegister = mode === "register";
+  const title = isRegister ? "สมัครสมาชิก" : "ยินดีต้อนรับกลับ";
+  const description = isRegister ? "บันทึกประวัติอัญมณีที่คุณสนใจ" : "เข้าสู่ระบบเพื่อใช้งานบัญชีของคุณ";
+  const form = isRegister
+    ? `<label class="field"><span class="field-label">ชื่อผู้ใช้</span><input class="form-control" name="username" autocomplete="username" required minlength="3" maxlength="40"></label>
+       <label class="field"><span class="field-label">อีเมล</span><input class="form-control" name="email" type="email" autocomplete="email" required maxlength="160"></label>
+       <label class="field"><span class="field-label">รหัสผ่าน</span><input class="form-control" name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="128"><span class="field-hint">ใช้รหัสผ่านอย่างน้อย 8 ตัวอักษร</span></label>
+       <label class="field"><span class="field-label">ยืนยันรหัสผ่าน</span><input class="form-control" name="confirmPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="128"></label>
+       <button class="button button-primary" type="submit">สร้างบัญชีสมาชิก</button>`
+    : `<label class="field"><span class="field-label">อีเมล</span><input class="form-control" name="email" type="email" autocomplete="username" required maxlength="160"></label>
+       <label class="field"><span class="field-label">รหัสผ่าน</span><input class="form-control" name="password" type="password" autocomplete="current-password" required maxlength="128"></label>
+       <button class="button button-primary" type="submit">เข้าสู่ระบบ</button>`;
+  shell(`<div class="container"><div class="auth-wrap"><section class="auth-panel">
+    <p class="eyebrow">อัญมณี อเทลิเยร์</p><h1>${title}</h1><p>${description}</p>
+    <div id="auth-feedback" aria-live="polite"></div>
+    <form class="auth-form" id="${isRegister ? "register-form" : "login-form"}">${form}</form>
+    ${isRegister ? `<p class="auth-footer">มีบัญชีแล้ว? <a href="#login">เข้าสู่ระบบ</a></p>` : `<p class="auth-footer"><button type="button" data-action="forgot-password">ลืมรหัสผ่าน?</button><br>ยังไม่มีบัญชี? <a href="#register">สมัครสมาชิก</a></p>`}
+    ${!isRegister ? `<div class="demo-note"><strong>บัญชีสำหรับทดลองระบบ</strong><br>อีเมล: ${DEMO_ADMIN}<br>รหัสผ่าน: ${DEMO_PASSWORD}<br><small>ใช้สำหรับทดลองเท่านั้น ห้ามใช้รหัสผ่านจริงหรือรหัสที่ใช้กับบริการอื่น</small></div>` : ""}
+  </section></div></div>`);
+}
+
+function adminNav(active) {
+  const links = [
+    ["admin", "สินค้าและสต็อก", "ADM-01 · ADM-04"],
+    ["admin/content", "เนื้อหาเว็บไซต์", "ADM-05"],
+    ["dashboard", "แดชบอร์ด", "DB-01 · DB-05"]
+  ];
+  return `<aside class="admin-side" aria-label="เมนูผู้ดูแล"><span class="admin-side-title">จัดการร้าน</span>${links.map(([route, label, code]) => `<button type="button" data-route="${route}" aria-current="${active === route ? "page" : "false"}">${label}<br><small>${code}</small></button>`).join("")}<button type="button" data-action="reset-demo">คืนค่าข้อมูลเดโม</button></aside>`;
+}
+
+function adminPage() {
+  if (currentUser?.role !== "admin") {
+    navigate(currentUser ? "home" : "login");
+    return "";
+  }
+  const list = products().filter((product) => `${product.name} ${product.code} ${product.type}`.toLowerCase().includes(adminSearch.toLowerCase()));
+  return `<div class="container"><div class="admin-shell">${adminNav("admin")}
+    <section class="admin-content"><p class="eyebrow">ผู้ดูแลระบบ · ADM-01 ถึง ADM-04</p><h1>สินค้าและสต็อก</h1><p class="lede">จัดการข้อมูลอัญมณี ราคา รูปภาพ และจำนวนคงเหลือ</p>
+      <div class="admin-toolbar"><label class="search-field"><span class="visually-hidden">ค้นหาสินค้า</span><span class="search-icon" aria-hidden="true">⌕</span><input class="form-control" id="admin-search" type="search" value="${escapeHtml(adminSearch)}" placeholder="ค้นหาชื่อ รหัส หรือประเภท"></label>
+        <button class="button button-primary" data-action="add-product">เพิ่มสินค้า</button></div>
+      <section class="data-panel"><div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>ประเภท</th><th>ราคา / กรัม</th><th>คงเหลือ</th><th>เผยแพร่</th><th>จัดการ</th></tr></thead>
+      <tbody>${list.map((product) => `<tr><td><div class="table-product"><span class="table-gem">${gemImage(product)}</span><span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.code)}</small></span></div></td>
+        <td>${escapeHtml(gemTypeLabels[product.type] || product.type)}</td><td>${formatPrice(Number(product.price))}</td><td>${Number(product.stock)} ชิ้น${product.lowStock === "" || product.lowStock == null ? " · ยังไม่กำหนดเกณฑ์" : ` · ใกล้หมด ≤ ${Number(product.lowStock)}`}</td>
+        <td>${product.published ? '<span class="status-pill status-available">เผยแพร่</span>' : '<span class="status-pill status-neutral">ซ่อน</span>'}</td>
+        <td><div class="table-actions"><button class="button button-secondary button-small" data-action="edit-product" data-id="${escapeHtml(product.id)}">แก้ไข</button><button class="button button-quiet button-small" data-action="stock-product" data-id="${escapeHtml(product.id)}">ปรับสต็อก</button><button class="button button-quiet button-small" data-action="delete-product" data-id="${escapeHtml(product.id)}">นำออก</button></div></td></tr>`).join("") || `<tr><td colspan="6">${emptyState("ไม่พบสินค้า", "ลองเปลี่ยนคำค้นหา หรือเพิ่มสินค้าใหม่")}</td></tr>`}</tbody></table></div></section>
+    </section></div></div>`;
+}
+
+function contentAdminPage() {
+  if (currentUser?.role !== "admin") {
+    navigate(currentUser ? "home" : "login");
+    return "";
+  }
+  const content = readStore(STORAGE.content, { headline: "", intro: "" });
+  return `<div class="container"><div class="admin-shell">${adminNav("admin/content")}
+    <section class="admin-content"><p class="eyebrow">ผู้ดูแลระบบ · ADM-05</p><h1>เนื้อหาเว็บไซต์</h1><p class="lede">แก้ไขข้อความบนหน้าแรกและตรวจสอบก่อนบันทึก</p>
+      <form class="data-panel dialog-content-form" id="content-form">
+        <label class="field"><span class="field-label">พาดหัวหน้าแรก</span><input class="form-control" name="headline" value="${escapeHtml(content.headline)}" required maxlength="120"></label>
+        <label class="field"><span class="field-label">คำแนะนำ</span><textarea class="form-control" name="intro" required maxlength="360">${escapeHtml(content.intro)}</textarea></label>
+        <div><button class="button button-primary" type="submit">บันทึกเนื้อหา</button></div>
+      </form>
+    </section></div></div>`;
+}
+
+function getReportRange() {
+  const start = document.querySelector("#report-start")?.value || daysAgoInThailand(30);
+  const end = document.querySelector("#report-end")?.value || dateInThailand();
+  return { start, end };
+}
+
+function reportsForRange(start, end) {
+  const startTime = new Date(`${start}T00:00:00+07:00`).getTime();
+  const endTime = new Date(`${end}T23:59:59.999+07:00`).getTime();
+  return events().filter((event) => {
+    const time = new Date(event.occurredAt).getTime();
+    return time >= startTime && time <= endTime;
+  });
+}
+
+function dashboardReportData(report, rangeEvents) {
+  if (report === "pir") return { count: rangeEvents.filter((event) => event.type === "pir").length, label: "เหตุการณ์ตรวจจับการเคลื่อนไหว", empty: "ไม่มีข้อมูลเหตุการณ์ตรวจจับการเคลื่อนไหวในช่วงเวลาที่เลือก" };
+  if (report === "visits") return { count: rangeEvents.filter((event) => event.type === "visit").length, label: "ครั้งเข้าชมเว็บไซต์", empty: "ไม่มีข้อมูลการเข้าชมในช่วงเวลาที่เลือก" };
+  if (report === "inventory") {
+    const items = products();
+    return { count: items.length, label: "รายการสินค้า", stock: items.reduce((total, item) => total + Number(item.stock || 0), 0), out: items.filter((item) => Number(item.stock) === 0).length,
+      low: items.filter((item) => item.lowStock !== "" && item.lowStock != null && Number(item.stock) > 0 && Number(item.stock) <= Number(item.lowStock)).length, empty: items.length ? "" : "ไม่มีรายการสินค้า" };
+  }
+  const grouped = new Map();
+  rangeEvents.filter((event) => event.type === "product_view").forEach((event) => {
+    const product = products().find((item) => item.id === event.productId);
+    const key = event.productId;
+    if (product) grouped.set(key, { name: product.name, count: (grouped.get(key)?.count || 0) + 1 });
+  });
+  return { rows: [...grouped.values()].sort((a, b) => b.count - a.count), label: "จำนวนครั้งเปิดดูสินค้า", empty: "ไม่มีข้อมูลการเปิดดูสินค้าในช่วงเวลาที่เลือก" };
+}
+
+function dashboardPage() {
+  if (currentUser?.role !== "admin") {
+    navigate(currentUser ? "home" : "login");
+    return "";
+  }
+  const startDefault = daysAgoInThailand(30);
+  const endDefault = dateInThailand();
+  const reportEvents = reportsForRange(startDefault, endDefault);
+  const stock = dashboardReportData("inventory", reportEvents);
+  const visits = dashboardReportData("visits", reportEvents);
+  const views = dashboardReportData("views", reportEvents);
+  const reportLabels = [["pir", "การเคลื่อนไหว"], ["inventory", "สินค้าและสต็อก"], ["visits", "การเข้าชมเว็บไซต์"], ["views", "สินค้าที่ได้รับความสนใจ"], ["member-history", "ประวัติสมาชิก"]];
+  const memberList = users().filter((user) => user.role === "member");
+  return `<div class="container"><div class="admin-shell">${adminNav("dashboard")}
+    <section class="admin-content"><p class="eyebrow">ผู้ดูแลระบบ · รายงาน DB-01 ถึง DB-05</p><h1>แดชบอร์ด</h1><p class="lede">สรุปข้อมูลที่บันทึกไว้จริงในเดโม และแสดงเวลาอ้างอิงประเทศไทย</p>
+      <div class="metric-grid">
+        <div class="metric"><span>รายการสินค้า</span><strong>${stock.count}</strong></div>
+        <div class="metric"><span>คงเหลือรวม (ชิ้น)</span><strong>${stock.stock}</strong></div>
+        <div class="metric"><span>สินค้าหมด</span><strong>${stock.out}</strong></div>
+        <div class="metric"><span>เข้าชมเว็บ · 30 วัน</span><strong>${visits.count}</strong></div>
+      </div>
+      <div class="report-tabs" role="group" aria-label="เลือกประเภทรายงาน">${reportLabels.map(([id, label]) => `<button type="button" data-report="${id}" aria-pressed="${currentReport === id}">${label}</button>`).join("")}</div>
+      <div class="data-panel">
+        <div class="report-filter">
+          <label class="field"><span class="field-label">ตั้งแต่</span><input class="form-control" type="date" id="report-start" min="${daysAgoInThailand(365)}" max="${endDefault}" value="${startDefault}"></label>
+          <label class="field"><span class="field-label">ถึง</span><input class="form-control" type="date" id="report-end" min="${daysAgoInThailand(365)}" max="${endDefault}" value="${endDefault}"></label>
+          ${currentReport === "member-history" ? `<label class="field"><span class="field-label">สมาชิก</span><select class="form-control" id="report-member"><option value="">เลือกสมาชิก</option>${memberList.map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(user.username)} · ${escapeHtml(user.email)}</option>`).join("")}</select></label>` : ""}
+          <button type="button" class="button button-secondary" data-action="apply-report">อัปเดตรายงาน</button>
+        </div>
+        <div id="report-content">${renderReportContent(currentReport, startDefault, endDefault, "")}</div>
+      </div>
+    </section></div></div>`;
+}
+
+function renderReportContent(report, start, end, memberId) {
+  if (new Date(start) > new Date(end)) return `<div class="notice notice-danger" role="alert">ช่วงวันที่ไม่ถูกต้อง โปรดตรวจสอบวันที่เริ่มต้นและวันที่สิ้นสุด</div>`;
+  const list = reportsForRange(start, end);
+  if (report === "member-history") {
+    if (!memberId) return emptyState("เลือกสมาชิก", "เลือกสมาชิกและช่วงเวลาเพื่อดูประวัติความสนใจ");
+    if (new Date(start) < new Date(daysAgoInThailand(90))) return `<div class="notice notice-danger" role="alert">ประวัติสมาชิกเก็บไว้ไม่เกิน 90 วัน โปรดเลือกช่วงเวลาใหม่</div>`;
+    const member = users().find((user) => user.id === memberId && user.role === "member");
+    if (!member) return emptyState("ไม่พบสมาชิก", "เลือกสมาชิกที่มีอยู่ในระบบ");
+    const history = readStore("jgs.member.history.v1", []).filter((entry) => entry.memberId === memberId && new Date(entry.occurredAt) >= new Date(`${start}T00:00:00+07:00`) && new Date(entry.occurredAt) <= new Date(`${end}T23:59:59.999+07:00`)).sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+    if (!history.length) return emptyState("ไม่มีประวัติในช่วงเวลาที่เลือก", "ประวัติสมาชิกจะแสดงเมื่อสมาชิกเปิดดูรายละเอียดอัญมณีหลังจากเข้าสู่ระบบ");
+    return `<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>วันที่และเวลา (ประเทศไทย)</th></tr></thead><tbody>${history.map((entry) => {
+      const product = products().find((item) => item.id === entry.productId);
+      return `<tr><td>${escapeHtml(product?.name || "สินค้าไม่เผยแพร่")}</td><td>${formatDate(entry.occurredAt, { hour: "2-digit", minute: "2-digit" })}</td></tr>`;
+    }).join("")}</tbody></table></div>`;
+  }
+  const data = dashboardReportData(report, list);
+  if (report === "inventory") {
+    return `<div class="metric-grid">
+      <div class="metric"><span>รายการสินค้า</span><strong>${data.count}</strong></div><div class="metric"><span>คงเหลือรวม (ชิ้น)</span><strong>${data.stock}</strong></div>
+      <div class="metric"><span>สินค้าหมด</span><strong>${data.out}</strong></div><div class="metric"><span>สินค้าใกล้หมด</span><strong>${data.low}</strong></div>
+    </div>${data.empty ? `<div class="notice notice-info">${escapeHtml(data.empty)}</div>` : `<p class="field-hint">ยอดคงเหลือและเกณฑ์ใกล้หมดอ้างอิงจากรายการที่ผู้ดูแลบันทึกไว้ แต่ละสินค้าใช้เกณฑ์ของตนเอง</p>`}`;
+  }
+  if (report === "pir" || report === "visits") {
+    if (!data.count) return emptyState(report === "pir" ? "ไม่มีข้อมูลการตรวจจับการเคลื่อนไหว" : "ไม่มีข้อมูลการเข้าชม", data.empty);
+    return `<div class="metric"><span>${escapeHtml(data.label)}</span><strong>${data.count}</strong></div>`;
+  }
+  if (!data.rows.length) return emptyState("ไม่มีข้อมูลการเปิดดูสินค้า", data.empty);
+  const max = data.rows[0].count;
+  return `<p class="field-hint">${escapeHtml(data.label)} · รวม ${data.rows.reduce((total, row) => total + row.count, 0)} ครั้ง · เรียงจากยอดสูงสุด</p>
+    <div class="bar-list">${data.rows.map((row) => `<div class="bar-row"><span>${escapeHtml(row.name)}</span><span class="bar-track"><span class="bar-fill" style="display:block;width:${Math.max(4, row.count / max * 100)}%"></span></span><strong>${row.count}</strong></div>`).join("")}</div>`;
+}
+
+function navigate(route) {
+  const next = route.replace(/^#/, "");
+  if (location.hash.slice(1) === next) {
+    currentRoute = next || "home";
+    render();
+    return;
+  }
+  location.hash = next || "home";
+}
+
+function render() {
+  const route = location.hash.slice(1) || "home";
+  currentRoute = route;
+  const [page, ...rest] = route.split("/");
+  if (page === "home") shell(homePage());
+  else if (page === "catalog") shell(catalogPage());
+  else if (page === "product") shell(detailPage(decodeURIComponent(rest.join("/"))));
+  else if (page === "live") shell(livePage());
+  else if (page === "login" || page === "register") authPage(page);
+  else if (page === "admin" && rest[0] === "content") shell(contentAdminPage(), { admin: true });
+  else if (page === "admin") shell(adminPage(), { admin: true });
+  else if (page === "dashboard") shell(dashboardPage(), { admin: true });
+  else shell(homePage());
+}
+
+function showToast(message, kind = "success") {
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.dataset.kind = kind === "error" ? "error" : kind === "warning" ? "warning" : "success";
+  toast.setAttribute("role", kind === "error" ? "alert" : "status");
+  toast.textContent = message;
+  toastRegion.append(toast);
+  setTimeout(() => toast.remove(), 4200);
+}
+
+function setAuthFeedback(message, kind = "info") {
+  const region = document.querySelector("#auth-feedback");
+  if (region) region.innerHTML = message ? `<div class="notice notice-${kind}" role="${kind === "danger" ? "alert" : "status"}">${escapeHtml(message)}</div>` : "";
+}
+
+function showDialog(content, title = "") {
+  dialogContent.innerHTML = `${title ? `<div class="dialog-heading"><h2 id="dialog-title">${escapeHtml(title)}</h2></div>` : '<span id="dialog-title" class="visually-hidden">หน้าต่างโต้ตอบ</span>'}${content}`;
+  dialog.showModal();
+}
+
+function closeDialog() {
+  if (dialog.open) dialog.close();
+}
+
+function productForm(product = null, stockOnly = false) {
+  const editing = Boolean(product);
+  const fields = stockOnly
+    ? `<label class="field"><span class="field-label">จำนวนคงเหลือ (ชิ้น)</span><input class="form-control" name="stock" type="number" min="0" step="1" value="${Number(product.stock)}" required></label>
+       <label class="field"><span class="field-label">เกณฑ์สินค้าใกล้หมด (ชิ้น)</span><input class="form-control" name="lowStock" type="number" min="0" step="1" value="${product.lowStock ?? ""}" placeholder="เว้นว่างหากยังไม่กำหนด"></label>`
+    : `<label class="field"><span class="field-label">รหัสสินค้า</span><input class="form-control" name="code" value="${escapeHtml(product?.code || "")}" required maxlength="30"></label>
+       <label class="field"><span class="field-label">ชื่อสินค้า</span><input class="form-control" name="name" value="${escapeHtml(product?.name || "")}" required maxlength="80"></label>
+       <label class="field"><span class="field-label">ประเภทอัญมณี</span><select class="form-control" name="type" required>${Object.entries(gemTypeLabels).map(([type, label]) => `<option value="${type}" ${(product?.type || "Emerald") === type ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+       <label class="field"><span class="field-label">สีตัวอย่าง</span><select class="form-control" name="color" required>${Object.keys(gemPalettes).map((color) => `<option value="${color}" ${(product?.color || "emerald") === color ? "selected" : ""}>${escapeHtml(gemColorLabels[color])}</option>`).join("")}</select></label>
+       <label class="field"><span class="field-label">รูปแบบเจียระไน</span><select class="form-control" name="cut" required>${Object.entries(gemCutLabels).map(([cut, label]) => `<option value="${cut}" ${(product?.cut || "Oval") === cut ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+       <label class="field"><span class="field-label">แหล่งกำเนิด</span><input class="form-control" name="origin" value="${escapeHtml(product?.origin || "")}" maxlength="60"></label>
+       <label class="field"><span class="field-label">ราคา (บาท/กรัม)</span><input class="form-control" name="price" type="number" min="0" step="0.01" value="${Number(product?.price || 0)}" required></label>
+       <label class="field"><span class="field-label">จำนวนคงเหลือ (ชิ้น)</span><input class="form-control" name="stock" type="number" min="0" step="1" value="${Number(product?.stock || 0)}" required></label>
+       <label class="field"><span class="field-label">เกณฑ์สินค้าใกล้หมด</span><input class="form-control" name="lowStock" type="number" min="0" step="1" value="${product?.lowStock ?? ""}" placeholder="เว้นว่างหากยังไม่กำหนด"></label>
+       <label class="field field-full"><span class="field-label">รายละเอียด</span><textarea class="form-control" name="description" required maxlength="500">${escapeHtml(product?.description || "")}</textarea></label>
+       <label class="field field-full"><span class="field-label">เพิ่มรูปภาพ (เลือกได้หลายไฟล์)</span><input class="form-control" name="images" type="file" accept="image/*" multiple><span class="field-hint">สูงสุด 5 MB ต่อไฟล์ · หากไม่มีภาพจริง ระบบจะแสดงภาพอัญมณีประกอบที่สร้างจากข้อมูลสินค้า</span></label>
+       ${product?.images?.length ? `<div class="field field-full"><span class="field-label">รูปที่บันทึกไว้</span><div class="detail-thumbs">${product.images.map((image, index) => `<button type="button" data-action="remove-photo" data-index="${index}" aria-label="ลบรูปที่ ${index + 1}">×<img src="${image}" alt=""></button>`).join("")}</div></div>` : ""}
+       <label class="field field-full"><span><input name="published" type="checkbox" ${product?.published === false ? "" : "checked"}> เผยแพร่ในแคตตาล็อก</span></label>`;
+  return `<form class="dialog-content-form" id="product-form" data-id="${escapeHtml(product?.id || "")}" data-stock-only="${stockOnly}">
+    <div class="form-grid">${fields}</div><div class="dialog-actions"><button class="button button-secondary" type="button" data-action="close-dialog">ยกเลิก</button>
+      <button class="button button-primary" type="submit">${stockOnly ? "บันทึกสต็อก" : editing ? "บันทึกการแก้ไข" : "เพิ่มสินค้า"}</button></div></form>`;
+}
+
+async function resizeImage(file) {
+  if (file.size > 5 * 1024 * 1024) throw new Error(`${file.name}: ไฟล์มีขนาดเกิน 5 MB`);
+  if (!file.type.startsWith("image/")) throw new Error(`${file.name}: เลือกไฟล์รูปภาพเท่านั้น`);
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("ไม่สามารถประมวลผลรูปภาพได้");
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return canvas.toDataURL("image/jpeg", 0.78);
+}
+
+function resetDemoData() {
+  writeStore(STORAGE.products, defaultProducts);
+  writeStore(STORAGE.events, []);
+  writeStore(STORAGE.content, {
+    headline: "ใกล้ชิดอัญมณีล้ำค่าแห่งธรรมชาติ",
+    intro: "ค้นพบอัญมณีที่คัดสรรจากเอกลักษณ์ สีสัน และประกายที่งดงามเฉพาะตัว"
+  });
+  localStorage.removeItem("jgs.member.history.v1");
+  sessionStorage.removeItem("jgs.visit.recorded");
+  adminSearch = "";
+  closeDialog();
+  showToast("คืนค่าข้อมูลสินค้าและเนื้อหาเริ่มต้นแล้ว");
+  navigate("admin");
+}
+
+async function handleLogin(form) {
+  const data = new FormData(form);
+  const email = String(data.get("email") || "").trim().toLowerCase();
+  const password = String(data.get("password") || "");
+  const account = users().find((user) => user.email.toLowerCase() === email);
+  const lockRecords = readStore(STORAGE.login, {});
+  const record = lockRecords[email] || { attempts: 0, lockedUntil: 0 };
+  const now = Date.now();
+  if (record.lockedUntil > now) {
+    setAuthFeedback(`บัญชีถูกล็อก โปรดลองอีกครั้งหลัง ${formatDate(record.lockedUntil, { hour: "2-digit", minute: "2-digit" })} (เวลาไทย)`, "danger");
+    return;
+  }
+  if (record.lockedUntil && record.lockedUntil <= now) {
+    record.attempts = 0;
+    record.lockedUntil = 0;
+  }
+  const candidateHash = await hashPassword(password);
+  if (!account || candidateHash !== account.passwordHash) {
+    record.attempts += 1;
+    if (account) {
+      account.failedAttempts = record.attempts;
+      account.lockedUntil = record.lockedUntil;
+    }
+    if (record.attempts >= 5) {
+      record.lockedUntil = now + 24 * 60 * 60 * 1000;
+      if (account) account.lockedUntil = record.lockedUntil;
+      writeStore(STORAGE.login, { ...lockRecords, [email]: record });
+      if (account) writeStore(STORAGE.users, users().map((user) => user.id === account.id ? account : user));
+      setAuthFeedback("กรอกรหัสผ่านผิดครบ 5 ครั้ง บัญชีถูกล็อก 24 ชั่วโมง", "danger");
+      return;
+    }
+    writeStore(STORAGE.login, { ...lockRecords, [email]: record });
+    setAuthFeedback(`อีเมลหรือรหัสผ่านไม่ถูกต้อง (เหลือ ${5 - record.attempts} ครั้งก่อนล็อกบัญชี)`, "danger");
+    return;
+  }
+  if (account.lockedUntil > now || record.lockedUntil > now) {
+    setAuthFeedback(`บัญชีถูกล็อก โปรดลองอีกครั้งหลัง ${formatDate(account.lockedUntil || record.lockedUntil, { hour: "2-digit", minute: "2-digit" })} (เวลาไทย)`, "danger");
+    return;
+  }
+  writeStore(STORAGE.login, { ...lockRecords, [email]: { attempts: 0, lockedUntil: 0 } });
+  account.failedAttempts = 0;
+  account.lockedUntil = 0;
+  writeStore(STORAGE.users, users().map((user) => user.id === account.id ? account : user));
+  sessionStorage.setItem(SESSION_USER, account.id);
+  currentUser = account;
+  showToast("เข้าสู่ระบบแล้ว");
+  navigate(account.role === "admin" ? "dashboard" : "home");
+}
+
+async function handleRegister(form) {
+  const data = new FormData(form);
+  const username = String(data.get("username") || "").trim();
+  const email = String(data.get("email") || "").trim().toLowerCase();
+  const password = String(data.get("password") || "");
+  const confirmation = String(data.get("confirmPassword") || "");
+  if (username.length < 3) return setAuthFeedback("ชื่อผู้ใช้ต้องมีอย่างน้อย 3 ตัวอักษร", "danger");
+  if (password.length < 8) return setAuthFeedback("รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร", "danger");
+  if (password !== confirmation) return setAuthFeedback("รหัสผ่านทั้งสองช่องไม่ตรงกัน", "danger");
+  const list = users();
+  if (list.some((user) => user.email.toLowerCase() === email || user.username.toLowerCase() === username.toLowerCase())) {
+    return setAuthFeedback("อีเมลหรือชื่อผู้ใช้นี้มีอยู่แล้ว โปรดตรวจสอบข้อมูล", "danger");
+  }
+  list.push({
+    id: uuid(),
+    username,
+    email,
+    passwordHash: await hashPassword(password),
+    role: "member",
+    failedAttempts: 0,
+    lockedUntil: 0,
+    createdAt: new Date().toISOString()
+  });
+  writeStore(STORAGE.users, list);
+  showDialog(`<p>บัญชีสมาชิกถูกสร้างเรียบร้อยแล้ว โปรดลงชื่อเข้าใช้เพื่อเริ่มใช้งาน</p><div class="dialog-actions"><button class="button button-primary" data-action="go-login" type="button">ไปหน้าเข้าสู่ระบบ</button></div>`, "สมัครสมาชิกสำเร็จ");
+}
+
+function showForgotPassword() {
+  showDialog(`<form class="dialog-content-form" id="forgot-form">
+    <p class="field-hint">กรอกอีเมลบัญชี ระบบเดโมจะแสดงรหัส 6 หลักบนหน้านี้แทนการส่งอีเมลจริง</p>
+    <label class="field"><span class="field-label">อีเมล</span><input class="form-control" name="email" type="email" required autocomplete="email"></label>
+    <div class="dialog-actions"><button class="button button-secondary" type="button" data-action="close-dialog">ยกเลิก</button><button class="button button-primary" type="submit">ขอรหัสยืนยัน</button></div>
+  </form>`, "ตั้งรหัสผ่านใหม่");
+}
+
+function showResetCode(email) {
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  writeStore("jgs.reset.code.v1", { email, code, expiresAt: Date.now() + 15 * 60 * 1000, used: false });
+  showDialog(`<div class="notice notice-warning">โหมดเดโม: ไม่มีการส่งอีเมลจริง รหัสสำหรับทดสอบคือ <strong>${code}</strong> และหมดอายุใน 15 นาที</div>
+    <form class="dialog-content-form" id="reset-form">
+      <input type="hidden" name="email" value="${escapeHtml(email)}">
+      <label class="field"><span class="field-label">รหัสยืนยัน 6 หลัก</span><input class="form-control" name="code" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required></label>
+      <label class="field"><span class="field-label">รหัสผ่านใหม่</span><input class="form-control" name="password" type="password" minlength="8" maxlength="128" required autocomplete="new-password"></label>
+      <label class="field"><span class="field-label">ยืนยันรหัสผ่านใหม่</span><input class="form-control" name="confirmation" type="password" minlength="8" maxlength="128" required autocomplete="new-password"></label>
+      <div class="dialog-actions"><button class="button button-secondary" type="button" data-action="close-dialog">ยกเลิก</button><button class="button button-primary" type="submit">บันทึกรหัสผ่าน</button></div>
+    </form>`, "ยืนยันตัวตน");
+}
+
+function startLogout() {
+  showDialog(`<p>กำลังออกจากระบบ…</p>`, "ออกจากระบบ");
+  setTimeout(() => {
+    sessionStorage.removeItem(SESSION_USER);
+    currentUser = null;
+    closeDialog();
+    navigate("home");
+    showToast("ออกจากระบบแล้ว");
+  }, 500);
+}
+
+function onClick(event) {
+  const target = event.target.closest("[data-action], [data-route], [data-report]");
+  if (!target) return;
+  if (target.dataset.route) {
+    navigate(target.dataset.route);
+    return;
+  }
+  if (target.dataset.report) {
+    currentReport = target.dataset.report;
+    render();
+    return;
+  }
+  const id = target.dataset.id;
+  const product = id ? products().find((item) => item.id === id) : null;
+  switch (target.dataset.action) {
+    case "toggle-nav": {
+      const nav = document.querySelector("#main-nav");
+      const open = nav.dataset.open !== "true";
+      nav.dataset.open = String(open);
+      target.setAttribute("aria-expanded", String(open));
+      target.setAttribute("aria-label", open ? "ปิดเมนูนำทาง" : "เปิดเมนูนำทาง");
+      break;
+    }
+    case "logout": startLogout(); break;
+    case "rotate":
+      showDialog(`<div class="notice notice-warning">กล้อง ระบบควบคุม และสถานะแท่นยังไม่เชื่อมต่อ จึงไม่ส่งคำสั่งหมุนและไม่มีการเก็บคำสั่งไว้ต่อคิว</div>
+        <div class="dialog-actions"><button class="button button-primary" type="button" data-action="close-dialog">ปิด</button></div>`, "อุปกรณ์ไม่พร้อม");
+      break;
+    case "retry-stream":
+      document.querySelector("#stream-message").textContent = "สถานะกล้อง: ไม่ได้เชื่อมต่อ · สถานะสัญญาณภาพ: ยังไม่ได้ตั้งค่า · เชื่อมต่ออีกครั้งไม่สำเร็จ";
+      showToast("ยังรับภาพไม่ได้ เนื่องจากยังไม่ได้ตั้งค่าแหล่งสัญญาณ", "warning");
+      break;
+    case "clear-filters":
+      catalogQuery = "";
+      catalogType = "";
+      catalogAvailability = "";
+      render();
+      break;
+    case "add-product":
+      showDialog(productForm(), "เพิ่มสินค้าอัญมณี");
+      break;
+    case "edit-product":
+      if (product) showDialog(productForm(product), "แก้ไขสินค้า");
+      break;
+    case "stock-product":
+      if (product) showDialog(productForm(product, true), `ปรับสต็อก · ${product.name}`);
+      break;
+    case "delete-product":
+      if (product) showDialog(`<p>นำ <strong>${escapeHtml(product.name)}</strong> ออกจากรายการเผยแพร่หรือไม่? ข้อมูลสินค้าเดิมจะยังคงอยู่เพื่อรักษาประวัติรายงาน</p>
+        <div class="dialog-actions"><button class="button button-secondary" type="button" data-action="close-dialog">ยกเลิก</button><button class="button button-danger" type="button" data-action="confirm-delete" data-id="${escapeHtml(product.id)}">นำออกจากรายการ</button></div>`, "ยืนยันการนำสินค้าออก");
+      break;
+    case "confirm-delete":
+      if (product) {
+        writeStore(STORAGE.products, products().map((item) => item.id === product.id ? { ...item, published: false } : item));
+        closeDialog(); render(); showToast("นำสินค้าออกจากรายการเผยแพร่แล้ว");
+      }
+      break;
+    case "close-dialog": closeDialog(); break;
+    case "forgot-password": showForgotPassword(); break;
+    case "go-login": closeDialog(); navigate("login"); break;
+    case "reset-demo":
+      showDialog(`<p>รายการสินค้าและข้อความหน้าแรกจะถูกคืนค่าเป็นข้อมูลตัวอย่าง ส่วนบัญชีผู้ดูแลจะไม่ถูกลบ.</p>
+        <div class="dialog-actions"><button class="button button-secondary" type="button" data-action="close-dialog">ยกเลิก</button><button class="button button-primary" type="button" data-action="confirm-reset">คืนค่าข้อมูล</button></div>`, "คืนค่าข้อมูลเดโม");
+      break;
+    case "confirm-reset": resetDemoData(); break;
+    case "apply-report": {
+      const { start, end } = getReportRange();
+      const memberId = document.querySelector("#report-member")?.value || "";
+      const output = document.querySelector("#report-content");
+      if (output) output.innerHTML = renderReportContent(currentReport, start, end, memberId);
+      break;
+    }
+    case "select-photo":
+      currentDetailImage = Number(target.dataset.index || 0);
+      render();
+      break;
+    case "remove-photo": {
+      const form = document.querySelector("#product-form");
+      const current = products().find((item) => item.id === form?.dataset.id);
+      if (current) {
+        current.images.splice(Number(target.dataset.index), 1);
+        writeStore(STORAGE.products, products().map((item) => item.id === current.id ? current : item));
+        showDialog(productForm(current), "แก้ไขสินค้า");
+      }
+      break;
+    }
+    default: break;
+  }
+}
+
+async function onSubmit(event) {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement)) return;
+  if (form.id === "catalog-search") {
+    event.preventDefault();
+    const data = new FormData(form);
+    catalogQuery = String(data.get("query") || "").trim();
+    catalogType = String(data.get("type") || "");
+    catalogAvailability = String(data.get("availability") || "");
+    render();
+  } else if (form.id === "login-form") {
+    event.preventDefault();
+    await handleLogin(form);
+  } else if (form.id === "register-form") {
+    event.preventDefault();
+    await handleRegister(form);
+  } else if (form.id === "forgot-form") {
+    event.preventDefault();
+    const email = String(new FormData(form).get("email") || "").trim().toLowerCase();
+    if (!users().some((user) => user.email.toLowerCase() === email)) {
+      showToast("ไม่พบบัญชีนี้ในเดโม", "error");
+      return;
+    }
+    showResetCode(email);
+  } else if (form.id === "reset-form") {
+    event.preventDefault();
+    const data = new FormData(form);
+    const reset = readStore("jgs.reset.code.v1", null);
+    const email = String(data.get("email") || "").toLowerCase();
+    const code = String(data.get("code") || "");
+    const password = String(data.get("password") || "");
+    const confirmation = String(data.get("confirmation") || "");
+    if (!reset || reset.used || reset.email !== email || reset.code !== code || reset.expiresAt < Date.now()) {
+      showToast("รหัสยืนยันไม่ถูกต้อง หมดอายุ หรือถูกใช้ไปแล้ว", "error");
+      return;
+    }
+    if (password.length < 8 || password !== confirmation) {
+      showToast("รหัสผ่านใหม่ไม่ตรงกัน หรือสั้นกว่า 8 ตัวอักษร", "error");
+      return;
+    }
+    const list = users();
+    const account = list.find((user) => user.email.toLowerCase() === email);
+    if (!account) {
+      showToast("ไม่พบบัญชีนี้ในเดโม", "error");
+      return;
+    }
+    account.passwordHash = await hashPassword(password);
+    account.failedAttempts = 0;
+    account.lockedUntil = 0;
+    writeStore(STORAGE.users, list);
+    const lockRecords = readStore(STORAGE.login, {});
+    delete lockRecords[email];
+    writeStore(STORAGE.login, lockRecords);
+    writeStore("jgs.reset.code.v1", { ...reset, used: true });
+    showDialog(`<p>เปลี่ยนรหัสผ่านเรียบร้อยแล้ว โปรดใช้รหัสผ่านใหม่ในการเข้าสู่ระบบ</p><div class="dialog-actions"><button class="button button-primary" type="button" data-action="go-login">ไปหน้าเข้าสู่ระบบ</button></div>`, "ตั้งรหัสผ่านสำเร็จ");
+  } else if (form.id === "product-form") {
+    event.preventDefault();
+    const data = new FormData(form);
+    const id = form.dataset.id;
+    const stockOnly = form.dataset.stockOnly === "true";
+    const list = products();
+    const existing = list.find((item) => item.id === id);
+    const stock = Number(data.get("stock"));
+    const lowStockInput = String(data.get("lowStock") || "").trim();
+    const lowStock = lowStockInput === "" ? null : Number(lowStockInput);
+    if (!Number.isInteger(stock) || stock < 0 || (lowStock !== null && (!Number.isInteger(lowStock) || lowStock < 0))) {
+      showToast("จำนวนคงเหลือและเกณฑ์ใกล้หมดต้องเป็นจำนวนเต็มตั้งแต่ 0 ขึ้นไป", "error");
+      return;
+    }
+    if (stockOnly) {
+      if (!existing) return showToast("ไม่พบสินค้า โปรดโหลดหน้าใหม่", "error");
+      existing.stock = stock;
+      existing.lowStock = lowStock;
+      writeStore(STORAGE.products, list.map((item) => item.id === existing.id ? existing : item));
+      closeDialog(); render(); showToast("บันทึกจำนวนคงเหลือแล้ว");
+      return;
+    }
+    const code = String(data.get("code") || "").trim();
+    const name = String(data.get("name") || "").trim();
+    const type = String(data.get("type") || "").trim();
+    const duplicate = list.some((item) => item.id !== id && item.code.toLowerCase() === code.toLowerCase());
+    if (duplicate) return showToast("รหัสสินค้านี้มีอยู่แล้ว", "error");
+    const price = Number(data.get("price"));
+    if (!Number.isFinite(price) || price < 0 || !name || !type) return showToast("ตรวจสอบชื่อ ประเภท และราคาให้ถูกต้อง", "error");
+    const imageFiles = [...(form.querySelector('[name="images"]')?.files || [])];
+    const oldImages = existing?.images || [];
+    if (oldImages.length + imageFiles.length > 10) return showToast("สินค้าแต่ละรายการเพิ่มรูปได้ไม่เกิน 10 รูป", "error");
+    const resized = [];
+    try {
+      for (const file of imageFiles) resized.push(await resizeImage(file));
+    } catch (error) {
+      showToast(error.message || "ไม่สามารถอ่านไฟล์รูปภาพได้", "error");
+      return;
+    }
+    const updated = {
+      ...(existing || {}),
+      id: existing?.id || uuid(),
+      code, name, type,
+      color: String(data.get("color")),
+      cut: String(data.get("cut") || "").trim(),
+      origin: String(data.get("origin") || "").trim(),
+      description: String(data.get("description") || "").trim(),
+      price, stock, lowStock,
+      published: data.has("published"),
+      images: [...oldImages, ...resized]
+    };
+    if (existing) writeStore(STORAGE.products, list.map((item) => item.id === id ? updated : item));
+    else writeStore(STORAGE.products, [...list, updated]);
+    closeDialog(); render(); showToast(existing ? "บันทึกการแก้ไขแล้ว" : "เพิ่มสินค้าแล้ว");
+  } else if (form.id === "content-form") {
+    event.preventDefault();
+    const data = new FormData(form);
+    writeStore(STORAGE.content, { headline: String(data.get("headline")).trim(), intro: String(data.get("intro")).trim() });
+    showToast("บันทึกเนื้อหาหน้าแรกแล้ว");
+  }
+}
+
+function onInput(event) {
+  if (event.target.id !== "admin-search") return;
+  adminSearch = event.target.value;
+  const start = event.target.selectionStart;
+  render();
+  const next = document.querySelector("#admin-search");
+  next?.focus();
+  next?.setSelectionRange(start, start);
+}
+
+function handleActionClick(event) {
+  try {
+    onClick(event);
+  } catch (error) {
+    console.error("ดำเนินการไม่สำเร็จ:", error);
+    showToast(error.message || "ดำเนินการไม่สำเร็จ โปรดลองอีกครั้ง", "error");
+  }
+}
+
+app.addEventListener("click", handleActionClick);
+dialog.addEventListener("click", handleActionClick);
+dialog.addEventListener("click", (event) => {
+  if (event.target === dialog) closeDialog();
+});
+document.addEventListener("submit", (event) => {
+  onSubmit(event).catch((error) => {
+    console.error("บันทึกข้อมูลไม่สำเร็จ:", error);
+    showToast(error.message || "บันทึกข้อมูลไม่สำเร็จ โปรดลองอีกครั้ง", "error");
+  });
+});
+document.addEventListener("input", onInput);
+window.addEventListener("hashchange", render);
+
+initialize().catch((error) => {
+  console.error("Jewelry Gem Stone could not start:", error);
+  app.innerHTML = `<main class="container"><div class="notice notice-danger" role="alert"><strong>เริ่มต้นแอปไม่สำเร็จ</strong><br>${escapeHtml(error.message || "ไม่สามารถใช้พื้นที่จัดเก็บข้อมูลของเบราว์เซอร์ได้")} ลองล้างข้อมูลของเว็บไซต์นี้แล้วโหลดใหม่ หรือเปิดด้วยเบราว์เซอร์รุ่นปัจจุบัน</div></main>`;
+});

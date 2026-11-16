@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#123c32">
+    <meta name="description" content="สำรวจอัญมณี ชมตู้โชว์ และค้นพบเรื่องราวของอัญมณีแต่ละชิ้น">
+    <title>อัญมณี อเทลิเยร์ | อัญมณีที่มีเรื่องราว</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div id="app">
+      <div class="boot-screen" role="status">กำลังเตรียมข้อมูลอัญมณี…</div>
+    </div>
+    <dialog id="app-dialog" aria-labelledby="dialog-title">
+      <form method="dialog" class="dialog-close-form">
+        <button class="icon-button dialog-close" aria-label="ปิดหน้าต่าง">×</button>
+      </form>
+      <div id="dialog-content"></div>
+    </dialog>
+    <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <script src="app.js" defer></script>
+  </body>
+</html>
