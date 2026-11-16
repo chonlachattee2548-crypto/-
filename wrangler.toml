@@ -1,0 +1,16 @@
+name = "jewelry-gemstone-control"
+main = "worker/index.js"
+compatibility_date = "2026-11-16"
+workers_dev = true
+
+[vars]
+WEB_ORIGINS = "https://chonlachattee2548-crypto.github.io,http://localhost:4173,http://127.0.0.1:4173"
+REMOTE_CONTROL_ENABLED = "false"
+
+[[durable_objects.bindings]]
+name = "TURN_TABLE"
+class_name = "TurntableRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["TurntableRoom"]

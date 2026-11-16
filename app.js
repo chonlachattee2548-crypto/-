@@ -77,6 +77,13 @@ let catalogQuery = "";
 let catalogType = "";
 let catalogAvailability = "";
 let adminSearch = "";
+let turntableSimulation = false;
+let turntablePollTimer = null;
+let turnstileWidgetId = null;
+let turnstileToken = "";
+let lastShownCommandResult = "";
+let latestShowroomStatus = null;
+let showroomStatusInitialized = false;
 
 function readStore(key, fallback) {
   const raw = localStorage.getItem(key);
@@ -441,6 +448,14 @@ function detailPage(productId) {
 }
 
 function livePage() {
+  const isLocalPreview = ["localhost", "127.0.0.1"].includes(location.hostname);
+  const simulatorPanel = isLocalPreview
+    ? `<div class="simulator-panel">
+        <strong>ทดสอบระหว่างรอบอร์ด</strong>
+        <p>โหมดจำลองทดสอบได้เฉพาะหน้าจอ ไม่เชื่อมต่อหรือสั่งมอเตอร์จริง</p>
+        <button class="button button-secondary" id="simulator-button" type="button" data-action="toggle-simulator">${turntableSimulation ? "ปิดโหมดจำลอง" : "เริ่มโหมดจำลอง"}</button>
+      </div>`
+    : "";
   return `<div class="container">
     <div class="section-heading"><div><p class="eyebrow">ชมการจัดแสดง</p><h1>ตู้โชว์อัญมณี</h1><p class="lede">ชมอัญมณีในตู้โชว์และตรวจสอบสถานะอุปกรณ์ก่อนสั่งหมุนแท่น</p></div></div>
     <section class="live-grid" aria-label="ตู้โชว์อัญมณี">
@@ -455,17 +470,245 @@ function livePage() {
       </div>
       <aside class="live-controls" aria-labelledby="turntable-title">
         <h2 id="turntable-title">ควบคุมแท่นหมุน</h2>
-        <p>ระบบจะส่งคำสั่งหมุนหนึ่งรอบต่อเมื่อกล้อง ตัวควบคุม และแท่นหมุนพร้อมใช้งาน</p>
+        <p>ลูกค้าส่งคำสั่งได้ไม่เกินหนึ่งครั้งต่อนาที และส่งได้เมื่อบอร์ดรายงานว่าพร้อมเท่านั้น</p>
         <div class="device-list">
-          <div class="device-row"><span>กล้องตู้โชว์</span><span class="status-pill status-neutral">ไม่ได้เชื่อมต่อ</span></div>
-          <div class="device-row"><span>ตัวควบคุมมอเตอร์</span><span class="status-pill status-neutral">ไม่ได้เชื่อมต่อ</span></div>
-          <div class="device-row"><span>แท่นหมุน</span><span class="status-pill status-neutral">ไม่ทราบสถานะ</span></div>
+          <div class="device-row"><span>กล้องตู้โชว์</span><span class="status-pill status-neutral" id="camera-device-status">ยังไม่ได้ตั้งค่า</span></div>
+          <div class="device-row"><span>ตัวควบคุมมอเตอร์</span><span class="status-pill status-neutral" id="motor-device-status">ยังไม่ได้เชื่อมต่อ</span></div>
+          <div class="device-row"><span>แท่นหมุน</span><span class="status-pill status-neutral" id="turntable-device-status">ไม่ทราบสถานะ</span></div>
         </div>
-        <button class="button button-primary" type="button" data-action="rotate" aria-describedby="rotate-note">หมุนแท่น 360°</button>
-        <p id="rotate-note" class="showroom-note">ต้นแบบนี้ยังสั่งหมุนไม่ได้ ระบบจะไม่บันทึกคำสั่งเข้าคิวและไม่แจ้งว่าหมุนสำเร็จ</p>
+        <div id="turnstile-container" class="turnstile-container"></div>
+        <button class="button button-primary" id="rotate-button" type="button" data-action="rotate" aria-describedby="rotate-note" disabled>หมุนแท่น 360°</button>
+        <p id="rotate-note" class="showroom-note" role="status">ยังไม่ได้ตั้งค่าบริการกลาง จึงไม่มีการส่งคำสั่งไปยังบอร์ด</p>
+        ${simulatorPanel}
       </aside>
     </section>
   </div>`;
+}
+
+function showroomApiBase() {
+  const configured = String(window.GEMSTONE_DEVICE_CONFIG?.apiBase || "").trim();
+  if (!configured) return "";
+  try {
+    const url = new URL(configured);
+    if (url.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(url.hostname)) return "";
+    return url.href.replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+}
+
+function setDeviceBadge(id, label, style) {
+  const element = document.querySelector(`#${id}`);
+  if (!element) return;
+  element.textContent = label;
+  element.className = `status-pill status-${style}`;
+}
+
+function setShowroomMessage(message, kind = "info") {
+  const note = document.querySelector("#rotate-note");
+  if (!note) return;
+  note.textContent = message;
+  note.className = `showroom-note notice-${kind}`;
+}
+
+function updateRotateButton(status = null) {
+  const button = document.querySelector("#rotate-button");
+  if (!button) return;
+  if (turntableSimulation) {
+    button.disabled = Boolean(status?.busy);
+    return;
+  }
+  button.disabled = !status
+    || !status.remoteControlEnabled
+    || !status.deviceOnline
+    || !status.motorReady
+    || status.commandBusy
+    || !turnstileToken;
+}
+
+function showTurnstile() {
+  const config = window.GEMSTONE_DEVICE_CONFIG || {};
+  const siteKey = String(config.turnstileSiteKey || "").trim();
+  const container = document.querySelector("#turnstile-container");
+  if (!siteKey || !container || turnstileWidgetId !== null) return;
+
+  const renderWidget = () => {
+    if (!window.turnstile || !container.isConnected || turnstileWidgetId !== null) return;
+    turnstileWidgetId = window.turnstile.render(container, {
+      sitekey: siteKey,
+      action: "rotate",
+      callback: (token) => {
+        turnstileToken = token;
+        updateRotateButton(latestShowroomStatus);
+      },
+      "expired-callback": () => {
+        turnstileToken = "";
+        updateRotateButton(latestShowroomStatus);
+      },
+      "error-callback": () => {
+        turnstileToken = "";
+        updateRotateButton(latestShowroomStatus);
+        setShowroomMessage("ยืนยันความปลอดภัยไม่สำเร็จ โปรดลองโหลดหน้าใหม่", "warning");
+      }
+    });
+  };
+
+  if (window.turnstile) {
+    renderWidget();
+    return;
+  }
+  let script = document.querySelector("#turnstile-script");
+  if (!script) {
+    script = document.createElement("script");
+    script.id = "turnstile-script";
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.defer = true;
+    script.addEventListener("load", renderWidget, { once: true });
+    document.head.append(script);
+  } else {
+    script.addEventListener("load", renderWidget, { once: true });
+  }
+}
+
+function updateShowroomFromStatus(status) {
+  const notifyNewResult = showroomStatusInitialized;
+  latestShowroomStatus = status;
+  setDeviceBadge("camera-device-status", "ยังไม่ได้ตั้งค่า", "neutral");
+  if (status.deviceOnline) {
+    setDeviceBadge("motor-device-status", status.motorReady ? "เชื่อมต่อและพร้อม" : "เชื่อมต่อ แต่ยังไม่พร้อม", status.motorReady ? "available" : "warning");
+    setDeviceBadge("turntable-device-status", status.commandBusy ? "กำลังทำงาน" : status.motorReady ? "พร้อมรับคำสั่ง" : "รอตรวจสอบ", status.commandBusy ? "warning" : status.motorReady ? "available" : "neutral");
+  } else {
+    setDeviceBadge("motor-device-status", "ไม่ได้เชื่อมต่อ", "neutral");
+    setDeviceBadge("turntable-device-status", "ไม่ทราบสถานะ", "neutral");
+  }
+
+  if (!window.GEMSTONE_DEVICE_CONFIG?.turnstileSiteKey) {
+    setShowroomMessage("บริการกลางยังไม่ได้ตั้งค่า Turnstile สำหรับป้องกันการสั่งงานอัตโนมัติ", "warning");
+  } else if (!status.remoteControlEnabled) {
+    setShowroomMessage("บริการกลางยังปิดการสั่งมอเตอร์จริงไว้ เพื่อรอทดสอบอุปกรณ์และการหยุดฉุกเฉิน", "info");
+  } else if (!status.deviceOnline) {
+    setShowroomMessage("ยังไม่พบบอร์ดออนไลน์ จึงไม่ส่งคำสั่งหมุน", "info");
+  } else if (!status.motorReady) {
+    setShowroomMessage("บอร์ดเชื่อมต่อแล้ว แต่ยังไม่ได้รายงานว่ามอเตอร์พร้อม", "warning");
+  } else if (status.commandBusy) {
+    setShowroomMessage("มีคำสั่งอยู่ระหว่างดำเนินการ รอผลจากบอร์ดก่อน", "warning");
+  } else {
+    setShowroomMessage("บอร์ดพร้อม คำสั่งจะถูกส่งเมื่อยืนยันความปลอดภัยและผ่านช่วงพักการสั่ง", "info");
+  }
+
+  if (notifyNewResult && status.lastResult?.id && status.lastResult.id !== lastShownCommandResult) {
+    lastShownCommandResult = status.lastResult.id;
+    if (status.lastResult.status === "completed") showToast("บอร์ดยืนยันว่าทำคำสั่งเสร็จแล้ว");
+    else showToast(status.lastResult.message || "บอร์ดไม่ได้ยืนยันว่าคำสั่งเสร็จ", "warning");
+  }
+  if (!showroomStatusInitialized) lastShownCommandResult = status.lastResult?.id || "";
+  showroomStatusInitialized = true;
+  updateRotateButton(status);
+}
+
+async function pollShowroomStatus() {
+  clearTimeout(turntablePollTimer);
+  turntablePollTimer = null;
+  if (currentRoute !== "live" || turntableSimulation) return;
+  const base = showroomApiBase();
+  if (!base) return;
+
+  try {
+    const response = await fetch(`${base}/api/status`, { headers: { accept: "application/json" } });
+    if (!response.ok) throw new Error("ไม่สามารถอ่านสถานะบริการกลางได้");
+    updateShowroomFromStatus(await response.json());
+  } catch (error) {
+    setDeviceBadge("motor-device-status", "ตรวจสอบบริการไม่ได้", "warning");
+    setDeviceBadge("turntable-device-status", "ไม่ทราบสถานะ", "neutral");
+    setShowroomMessage("ติดต่อบริการกลางไม่ได้ จึงปิดปุ่มสั่งหมุนไว้", "warning");
+    updateRotateButton(null);
+    console.error("อ่านสถานะอุปกรณ์ไม่สำเร็จ:", error);
+  } finally {
+    if (currentRoute === "live" && !turntableSimulation) {
+      turntablePollTimer = setTimeout(pollShowroomStatus, 5000);
+    }
+  }
+}
+
+function initializeShowroom() {
+  turnstileWidgetId = null;
+  turnstileToken = "";
+  latestShowroomStatus = null;
+  showroomStatusInitialized = false;
+  const simulatorButton = document.querySelector("#simulator-button");
+  if (simulatorButton) simulatorButton.setAttribute("aria-pressed", String(turntableSimulation));
+
+  if (turntableSimulation) {
+    setDeviceBadge("motor-device-status", "จำลองการเชื่อมต่อ", "info");
+    setDeviceBadge("turntable-device-status", "จำลอง", "info");
+    setShowroomMessage("โหมดจำลองทำงานอยู่ การสั่งหมุนด้านล่างไม่ติดต่อบอร์ดจริง", "info");
+    updateRotateButton({ busy: false });
+    return;
+  }
+
+  if (!showroomApiBase()) {
+    setShowroomMessage("ยังไม่ได้ตั้งค่า URL ของบริการกลาง จึงไม่มีการส่งคำสั่งไปยังบอร์ด", "info");
+    updateRotateButton(null);
+    return;
+  }
+
+  if (!window.GEMSTONE_DEVICE_CONFIG?.turnstileSiteKey) {
+    setShowroomMessage("บริการกลางยังไม่ได้ตั้งค่า Turnstile สำหรับป้องกันการสั่งงานอัตโนมัติ", "warning");
+  } else {
+    showTurnstile();
+  }
+  void pollShowroomStatus();
+}
+
+function runSimulatedRotation() {
+  const button = document.querySelector("#rotate-button");
+  if (!button || button.disabled) return;
+  updateRotateButton({ busy: true });
+  setDeviceBadge("turntable-device-status", "กำลังจำลอง", "warning");
+  setShowroomMessage("กำลังจำลองการรับคำสั่งจากบอร์ด (ไม่ใช่การหมุนจริง)", "warning");
+  setTimeout(() => {
+    if (currentRoute !== "live" || !turntableSimulation) return;
+    setDeviceBadge("turntable-device-status", "จำลองเสร็จ", "info");
+    setShowroomMessage("จบการจำลองแล้ว ไม่มีการสั่งหรือขยับมอเตอร์จริง", "info");
+    updateRotateButton({ busy: false });
+  }, 1400);
+}
+
+async function sendRemoteRotation() {
+  const base = showroomApiBase();
+  if (!base || !turnstileToken) return;
+  const button = document.querySelector("#rotate-button");
+  if (button) button.disabled = true;
+  setShowroomMessage("กำลังส่งคำขอไปตรวจสอบบริการกลาง", "info");
+
+  try {
+    const response = await fetch(`${base}/api/commands/rotate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ turnstileToken })
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      const messages = {
+        device_not_ready: "บอร์ดยังไม่พร้อมรับคำสั่ง",
+        command_busy: "มีคำสั่งกำลังทำงาน โปรดลองภายหลัง",
+        cooldown: `ระบบพักการสั่งงาน โปรดลองอีกครั้งใน ${result.retryAfterSeconds || 60} วินาที`,
+        verification_required: "การยืนยันความปลอดภัยหมดอายุ โปรดยืนยันใหม่",
+        remote_control_disabled: "ระบบยังไม่เปิดควบคุมมอเตอร์จริง"
+      };
+      throw new Error(messages[result.error] || "บริการกลางไม่รับคำสั่งนี้");
+    }
+    setShowroomMessage("บริการกลางรับคำขอเข้าคิวแล้ว กำลังรอผลยืนยันจากบอร์ด", "info");
+    showToast("รับคำขอแล้ว ยังไม่ถือว่าหมุนเสร็จจนกว่าบอร์ดจะยืนยัน");
+  } catch (error) {
+    setShowroomMessage(error.message || "ส่งคำขอไม่สำเร็จ", "warning");
+    showToast(error.message || "ส่งคำขอไม่สำเร็จ", "error");
+  } finally {
+    turnstileToken = "";
+    if (window.turnstile && turnstileWidgetId !== null) window.turnstile.reset(turnstileWidgetId);
+    await pollShowroomStatus();
+  }
 }
 
 function authPage(mode) {
@@ -642,13 +885,17 @@ function navigate(route) {
 }
 
 function render() {
+  clearTimeout(turntablePollTimer);
   const route = location.hash.slice(1) || "home";
   currentRoute = route;
   const [page, ...rest] = route.split("/");
   if (page === "home") shell(homePage());
   else if (page === "catalog") shell(catalogPage());
   else if (page === "product") shell(detailPage(decodeURIComponent(rest.join("/"))));
-  else if (page === "live") shell(livePage());
+  else if (page === "live") {
+    shell(livePage());
+    initializeShowroom();
+  }
   else if (page === "login" || page === "register") authPage(page);
   else if (page === "admin" && rest[0] === "content") shell(contentAdminPage(), { admin: true });
   else if (page === "admin") shell(adminPage(), { admin: true });
@@ -866,8 +1113,12 @@ function onClick(event) {
     }
     case "logout": startLogout(); break;
     case "rotate":
-      showDialog(`<div class="notice notice-warning">กล้อง ระบบควบคุม และสถานะแท่นยังไม่เชื่อมต่อ จึงไม่ส่งคำสั่งหมุนและไม่มีการเก็บคำสั่งไว้ต่อคิว</div>
-        <div class="dialog-actions"><button class="button button-primary" type="button" data-action="close-dialog">ปิด</button></div>`, "อุปกรณ์ไม่พร้อม");
+      if (turntableSimulation) runSimulatedRotation();
+      else void sendRemoteRotation();
+      break;
+    case "toggle-simulator":
+      turntableSimulation = !turntableSimulation;
+      render();
       break;
     case "retry-stream":
       document.querySelector("#stream-message").textContent = "สถานะกล้อง: ไม่ได้เชื่อมต่อ · สถานะสัญญาณภาพ: ยังไม่ได้ตั้งค่า · เชื่อมต่ออีกครั้งไม่สำเร็จ";
