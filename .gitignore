@@ -1,0 +1,2 @@
+.pio/
+firmware/esp32/secrets.h
