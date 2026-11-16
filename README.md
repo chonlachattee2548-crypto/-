@@ -14,11 +14,12 @@ py -m http.server 4173
 
 ## เผยแพร่เว็บไซต์ให้คนอื่นเปิดดู
 
-โครงการนี้ตั้งค่า GitHub Pages ไว้แล้ว เมื่อส่งไฟล์ขึ้น repository สาธารณะ ระบบจะเผยแพร่เว็บไซต์ให้อัตโนมัติ โดยไม่ต้องติดตั้งแพ็กเกจหรือสั่ง build
+โครงการนี้ตั้งค่า workflow สำหรับ GitHub Pages ไว้แล้ว โดยไม่ต้องติดตั้งแพ็กเกจหรือสั่ง build ต้องเปิด GitHub Pages ใน repository ก่อนหนึ่งครั้ง
 
 1. ลงชื่อเข้าใช้ GitHub แล้วสร้าง repository ใหม่ โดยเลือก **Public** และอย่าสร้าง README, License หรือไฟล์เริ่มต้นซ้ำ
-2. ใน GitHub เปิด **Settings > Emails** แล้วคัดลอกอีเมล `noreply` ที่ GitHub ให้มา เพื่อไม่ให้อีเมลส่วนตัวติดไปกับประวัติ commit
-3. เปิด PowerShell ในโฟลเดอร์โครงการ แล้วแทนที่ `ชื่อผู้ใช้`, `ชื่อคลัง` และ `อีเมล-noreply-จาก-GitHub` ในคำสั่งต่อไปนี้ให้ตรงกับบัญชีและ repository ที่สร้าง
+2. ในหน้า repository เปิด **Settings > Pages** แล้วตั้ง **Build and deployment > Source** เป็น **GitHub Actions**
+3. ใน GitHub เปิด **Settings > Emails** แล้วคัดลอกอีเมล `noreply` ที่ GitHub ให้มา เพื่อไม่ให้อีเมลส่วนตัวติดไปกับประวัติ commit
+4. เปิด PowerShell ในโฟลเดอร์โครงการ แล้วแทนที่ `ชื่อผู้ใช้`, `ชื่อคลัง` และ `อีเมล-noreply-จาก-GitHub` ในคำสั่งต่อไปนี้ให้ตรงกับบัญชีและ repository ที่สร้าง
 
 ```powershell
 git init -b main
@@ -29,7 +30,7 @@ git remote add origin https://github.com/ชื่อผู้ใช้/ชื�
 git push -u origin main
 ```
 
-4. เปิดแท็บ **Actions** และรอ workflow ชื่อ **เผยแพร่เว็บบน GitHub Pages** ทำงานเสร็จ workflow จะเปิดใช้ Pages ให้อัตโนมัติ ลิงก์เว็บไซต์จะอยู่ใน **Settings > Pages** โดยปกติมีรูปแบบ `https://ชื่อผู้ใช้.github.io/ชื่อคลัง/`
+5. เปิดแท็บ **Actions** และรอ workflow ชื่อ **เผยแพร่เว็บบน GitHub Pages** ทำงานเสร็จ ลิงก์เว็บไซต์จะอยู่ใน **Settings > Pages** โดยปกติมีรูปแบบ `https://ชื่อผู้ใช้.github.io/ชื่อคลัง/`
 
 เมื่อแก้ไฟล์แล้วส่งขึ้น branch `main` อีกครั้ง เว็บไซต์จะอัปเดตให้อัตโนมัติ ไฟล์ทั้งหมดใน repository นี้จะเปิดดูได้สาธารณะด้วย
 
