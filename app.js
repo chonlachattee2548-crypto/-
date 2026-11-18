@@ -84,6 +84,11 @@ let turnstileToken = "";
 let lastShownCommandResult = "";
 let latestShowroomStatus = null;
 let showroomStatusInitialized = false;
+let serialPort = null;
+let serialReader = null;
+let serialDeviceInfo = null;
+let serialReadBuffer = "";
+let serialDisconnectHandler = null;
 
 function readStore(key, fallback) {
   const raw = localStorage.getItem(key);
@@ -275,7 +280,8 @@ function header() {
   const nav = admin
     ? `<a href="#admin" ${active === "admin" ? 'aria-current="page"' : ""}>สินค้า</a>
        <a href="#admin/content">เนื้อหาเว็บไซต์</a>
-       <a href="#dashboard" ${active === "dashboard" ? 'aria-current="page"' : ""}>แดชบอร์ด</a>`
+       <a href="#dashboard" ${active === "dashboard" ? 'aria-current="page"' : ""}>แดชบอร์ด</a>
+       <a href="#device" ${active === "device" ? 'aria-current="page"' : ""}>เชื่อมต่อบอร์ด</a>`
     : `<a href="#catalog" ${active === "catalog" ? 'aria-current="page"' : ""}>แคตตาล็อก</a>
        <a href="#live" ${active === "live" ? 'aria-current="page"' : ""}>ตู้โชว์อัญมณี</a>`;
   const accountAction = loggedIn
@@ -737,7 +743,8 @@ function adminNav(active) {
   const links = [
     ["admin", "สินค้าและสต็อก", "ADM-01 · ADM-04"],
     ["admin/content", "เนื้อหาเว็บไซต์", "ADM-05"],
-    ["dashboard", "แดชบอร์ด", "DB-01 · DB-05"]
+    ["dashboard", "แดชบอร์ด", "DB-01 · DB-05"],
+    ["device", "เชื่อมต่อบอร์ด", "ESP32 · USB / Wi-Fi"]
   ];
   return `<aside class="admin-side" aria-label="เมนูผู้ดูแล"><span class="admin-side-title">จัดการร้าน</span>${links.map(([route, label, code]) => `<button type="button" data-route="${route}" aria-current="${active === route ? "page" : "false"}">${label}<br><small>${code}</small></button>`).join("")}<button type="button" data-action="reset-demo">คืนค่าข้อมูลเดโม</button></aside>`;
 }
@@ -954,6 +961,292 @@ function renderReportContent(report, start, end, memberId) {
     <div class="bar-list">${data.rows.map((row) => `<div class="bar-row"><span>${escapeHtml(row.name)}</span><span class="bar-track"><span class="bar-fill" style="display:block;width:${Math.max(4, row.count / max * 100)}%"></span></span><strong>${row.count}</strong></div>`).join("")}</div>`;
 }
 
+function devicePage() {
+  if (currentUser?.role !== "admin") {
+    navigate(currentUser ? "home" : "login");
+    return "";
+  }
+  const serialSupported = Boolean(navigator.serial);
+  const securePage = window.isSecureContext;
+  const supportText = !securePage
+    ? "ต้องเปิดผ่าน HTTPS หรือ localhost เพื่อใช้ USB/Serial"
+    : serialSupported
+      ? "เบราว์เซอร์นี้รองรับ Web Serial"
+      : "เบราว์เซอร์นี้ไม่รองรับ Web Serial ลองใช้ Chrome หรือ Edge บนคอมพิวเตอร์";
+  return `<div class="container"><div class="admin-shell">${adminNav("device")}
+    <section class="admin-content device-center">
+      <p class="eyebrow">ผู้ดูแลระบบ · เชื่อมต่ออุปกรณ์</p>
+      <h1>ศูนย์เชื่อมต่อบอร์ด</h1>
+      <p class="lede">ตรวจสอบบอร์ดผ่าน USB/Serial หรือดูสถานะอุปกรณ์ที่เชื่อมอินเทอร์เน็ตกับบริการกลาง</p>
+      <div class="notice notice-warning device-safety-note" role="note"><strong>โหมดตรวจสอบอย่างปลอดภัย</strong><br>หน้านี้อ่านข้อมูลบอร์ดและส่งได้เฉพาะ IDENTIFY, STATUS และ STOP ไม่มีคำสั่งเริ่มหมุน มอเตอร์จริงยังปิดใน firmware</div>
+      <div class="device-connect-grid">
+        <section class="data-panel device-connect-panel" aria-labelledby="usb-connect-title">
+          <div class="device-panel-heading"><span class="device-icon" aria-hidden="true">⌁</span><div><h2 id="usb-connect-title">เชื่อมต่อ USB / Serial</h2><p id="serial-support">${escapeHtml(supportText)}</p></div></div>
+          <p>เสียบบอร์ดเข้าคอมพิวเตอร์ แล้วกดเลือกพอร์ตที่แสดงในหน้าต่างเบราว์เซอร์ ต้องอนุญาตพอร์ตด้วยตนเองทุกครั้งตามข้อกำหนดความปลอดภัยของเว็บ</p>
+          <div class="serial-device-summary" id="serial-device-summary" role="status" aria-live="polite">
+            <span class="status-pill status-neutral" id="serial-state-badge">ยังไม่ได้เชื่อมต่อ</span>
+            <p id="serial-state-message">ยังไม่มีพอร์ตที่เว็บได้รับอนุญาต</p>
+          </div>
+          <dl class="device-facts" id="serial-device-facts" hidden></dl>
+          <div class="device-actions">
+            <button type="button" class="button button-primary" data-action="connect-serial" ${!serialSupported || !securePage ? "disabled" : ""}>เลือกและเชื่อมต่อพอร์ต</button>
+            <button type="button" class="button button-secondary" data-action="serial-status" disabled>อ่านสถานะบอร์ด</button>
+            <button type="button" class="button button-danger button-small" data-action="serial-stop" disabled>ส่งคำสั่งหยุด</button>
+            <button type="button" class="button button-quiet button-small" data-action="disconnect-serial" hidden>ยกเลิกการเชื่อมต่อ</button>
+          </div>
+          <p class="field-hint">พอร์ต USB ที่พบเป็นชิปแปลง USB-to-Serial ได้ ไม่ได้ยืนยันรุ่นบอร์ดหรือขา GPIO ตัวตนจะแสดงเมื่อ firmware ที่รองรับตอบกลับเท่านั้น</p>
+        </section>
+        <section class="data-panel device-connect-panel" aria-labelledby="wifi-connect-title">
+          <div class="device-panel-heading"><span class="device-icon device-icon-network" aria-hidden="true">⌁</span><div><h2 id="wifi-connect-title">สถานะผ่าน Wi-Fi / อินเทอร์เน็ต</h2><p>ตรวจจาก heartbeat ที่บอร์ดส่งถึง Cloudflare Worker</p></div></div>
+          <div class="serial-device-summary" id="cloud-device-summary" role="status" aria-live="polite">
+            <span class="status-pill status-neutral" id="cloud-state-badge">ยังไม่ได้ตรวจสอบ</span>
+            <p id="cloud-state-message">กดตรวจสอบเพื่อดูว่ามีบอร์ดรายงานตัวกับบริการกลางหรือไม่</p>
+          </div>
+          <dl class="device-facts" id="cloud-device-facts" hidden></dl>
+          <div class="device-actions"><button type="button" class="button button-secondary" data-action="check-cloud-device">ตรวจสอบสถานะออนไลน์</button></div>
+          <p class="field-hint">ESP32-S3 มี Wi-Fi 2.4 GHz แต่ยังต้องตั้ง Wi-Fi และ DEVICE_TOKEN ลง firmware ก่อน บอร์ดที่มี Ethernet ต้องใช้ฮาร์ดแวร์เครือข่ายที่เข้ากันและ firmware เพิ่มเติม</p>
+        </section>
+      </div>
+      <section class="data-panel device-setup-panel">
+        <h2>สิ่งที่ระบบตรวจได้และข้อจำกัด</h2>
+        <ul class="device-capability-list">
+          <li><strong>USB:</strong> เบราว์เซอร์จะแสดงพอร์ตให้เจ้าของเลือกหลังจากกดปุ่ม ไม่มีเว็บใดสแกนหรือเปิดพอร์ตเงียบ ๆ ได้</li>
+          <li><strong>ระบุตัวชิป:</strong> firmware ที่รองรับส่งข้อมูลรุ่นชิปและโปรไฟล์ build ได้ แต่ไม่สามารถตรวจสายไฟ, รุ่นบอร์ดพัฒนา หรือ GPIO ที่ต่ออยู่</li>
+          <li><strong>Wi-Fi:</strong> ใช้ตรวจบอร์ดที่ตั้งค่า Wi-Fi และลงทะเบียนกับ Worker แล้ว ไม่ใช่การค้นหา ESP ทุกตัวบนเครือข่ายโดยอัตโนมัติ</li>
+          <li><strong>รุ่นอื่น:</strong> ต้องมี firmware/ไดรเวอร์และโปรไฟล์ของรุ่นนั้น ไม่สามารถรับประกันรองรับบอร์ดทุกรุ่นโดยอัตโนมัติ</li>
+        </ul>
+      </section>
+    </section></div></div>`;
+}
+
+function setConnectionStatus(kind, state, message) {
+  const badge = document.querySelector(`#${kind}-state-badge`);
+  const messageNode = document.querySelector(`#${kind}-state-message`);
+  if (badge) {
+    const confirmedFirmware = kind === "serial" && state === "เชื่อมต่อแล้ว" && serialDeviceInfo?.chipModel;
+    badge.textContent = confirmedFirmware ? "ยืนยัน firmware แล้ว" : state;
+    badge.className = `status-pill ${confirmedFirmware || state === "เชื่อมต่อแล้ว" || state === "ออนไลน์" ? "status-available" : state === "เกิดข้อผิดพลาด" ? "status-out" : "status-neutral"}`;
+  }
+  if (messageNode) messageNode.textContent = message;
+  const connected = kind === "serial" && Boolean(serialPort);
+  document.querySelector('[data-action="serial-status"]')?.toggleAttribute("disabled", !connected);
+  document.querySelector('[data-action="serial-stop"]')?.toggleAttribute("disabled", !connected);
+  document.querySelector('[data-action="disconnect-serial"]')?.toggleAttribute("hidden", !connected);
+}
+
+function renderSerialDeviceFacts(info) {
+  const facts = document.querySelector("#serial-device-facts");
+  if (!facts) return;
+  const labels = [
+    ["รุ่นชิป", info.chipModel],
+    ["รุ่นย่อย / revision", info.chipRevision],
+    ["จำนวนแกนประมวลผล", info.chipCores],
+    ["Flash", info.flashBytes ? `${(Number(info.flashBytes) / 1_048_576).toFixed(0)} MB` : ""],
+    ["PSRAM", info.psramBytes ? `${(Number(info.psramBytes) / 1_048_576).toFixed(0)} MB` : ""],
+    ["โปรไฟล์ firmware", info.boardProfile],
+    ["เวอร์ชัน firmware", info.firmware],
+    ["รุ่นโปรโตคอล", info.protocolVersion],
+    ["USB-to-Serial Vendor ID", info.usbVendorId ? `0x${Number(info.usbVendorId).toString(16).padStart(4, "0")}` : ""],
+    ["USB-to-Serial Product ID", info.usbProductId ? `0x${Number(info.usbProductId).toString(16).padStart(4, "0")}` : ""],
+    ["สถานะ Wi-Fi", typeof info.wifiConnected === "boolean" ? (info.wifiConnected ? "เชื่อมต่อแล้ว" : "ยังไม่เชื่อมต่อ") : ""],
+    ["มอเตอร์พร้อม", typeof info.motorReady === "boolean" ? (info.motorReady ? "พร้อม" : "ยังไม่พร้อม") : ""]
+  ].filter(([, value]) => value !== undefined && value !== null && value !== "");
+  facts.innerHTML = labels.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join("");
+  facts.hidden = labels.length === 0;
+  const badge = document.querySelector("#serial-state-badge");
+  if (badge) {
+    badge.textContent = info.chipModel ? "ยืนยัน firmware แล้ว" : "เชื่อมต่อแล้ว";
+    badge.className = "status-pill status-available";
+  }
+}
+
+function clearSerialDeviceFacts() {
+  serialDeviceInfo = null;
+  serialReadBuffer = "";
+  const facts = document.querySelector("#serial-device-facts");
+  if (facts) {
+    facts.replaceChildren();
+    facts.hidden = true;
+  }
+}
+
+function handleSerialLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+  try {
+    const data = JSON.parse(trimmed);
+    if (data.event === "identify" || data.event === "status") {
+      serialDeviceInfo = { ...serialDeviceInfo, ...data };
+      renderSerialDeviceFacts(serialDeviceInfo);
+      setConnectionStatus("serial", "เชื่อมต่อแล้ว", data.event === "identify"
+        ? "firmware ตอบกลับและรายงานข้อมูลชิปแล้ว"
+        : "อ่านสถานะ firmware จากพอร์ต USB/Serial แล้ว");
+      return;
+    }
+    if (data.event === "stop_requested") {
+      setConnectionStatus("serial", "เชื่อมต่อแล้ว", "บอร์ดรับคำสั่งหยุดแล้ว");
+      return;
+    }
+    if (data.error || data.reason) {
+      setConnectionStatus("serial", "เกิดข้อผิดพลาด", data.error || data.reason);
+      return;
+    }
+  } catch {
+    // Non-JSON serial output is ignored; the connection state remains explicit.
+  }
+}
+
+async function readSerialPort(port) {
+  const reader = port.readable.getReader();
+  serialReader = reader;
+  const decoder = new TextDecoder();
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      serialReadBuffer += decoder.decode(value, { stream: true });
+      const lines = serialReadBuffer.split(/\r?\n/);
+      serialReadBuffer = lines.pop() || "";
+      lines.forEach(handleSerialLine);
+    }
+  } catch (error) {
+    if (serialPort === port) setConnectionStatus("serial", "เกิดข้อผิดพลาด", `อ่านข้อมูลจากบอร์ดไม่สำเร็จ: ${error.message}`);
+  } finally {
+    reader.releaseLock();
+    if (serialReader === reader) serialReader = null;
+    if (serialPort === port && !port.readable) {
+      serialPort = null;
+      clearSerialDeviceFacts();
+      setConnectionStatus("serial", "ยังไม่ได้เชื่อมต่อ", "พอร์ตถูกตัดการเชื่อมต่อ");
+    }
+  }
+}
+
+async function writeSerialCommand(command) {
+  if (!serialPort?.writable) {
+    setConnectionStatus("serial", "เกิดข้อผิดพลาด", "ไม่มีพอร์ต Serial ที่เขียนข้อมูลได้");
+    return;
+  }
+  const writer = serialPort.writable.getWriter();
+  try {
+    await writer.write(new TextEncoder().encode(`${command}\n`));
+  } finally {
+    writer.releaseLock();
+  }
+}
+
+async function connectSerialDevice() {
+  if (!window.isSecureContext || !navigator.serial) {
+    setConnectionStatus("serial", "เกิดข้อผิดพลาด", "Web Serial ต้องใช้ Chrome/Edge ผ่าน HTTPS หรือ localhost");
+    return;
+  }
+  let selectedPort = null;
+  try {
+    setConnectionStatus("serial", "กำลังเชื่อมต่อ", "เลือกพอร์ต USB/Serial ในหน้าต่างเบราว์เซอร์");
+    selectedPort = await navigator.serial.requestPort();
+    await selectedPort.open({ baudRate: 115200 });
+    serialPort = selectedPort;
+    const usbInfo = selectedPort.getInfo();
+    serialDeviceInfo = {
+      ...(usbInfo.usbVendorId ? { usbVendorId: usbInfo.usbVendorId } : {}),
+      ...(usbInfo.usbProductId ? { usbProductId: usbInfo.usbProductId } : {})
+    };
+    renderSerialDeviceFacts(serialDeviceInfo);
+    serialReadBuffer = "";
+    serialDisconnectHandler = () => {
+      if (serialPort === selectedPort) {
+        serialPort = null;
+        serialReader = null;
+        clearSerialDeviceFacts();
+        setConnectionStatus("serial", "ยังไม่ได้เชื่อมต่อ", "ตรวจพบว่าถอดสาย USB ออก");
+      }
+    };
+    selectedPort.addEventListener("disconnect", serialDisconnectHandler);
+    setConnectionStatus("serial", "เชื่อมต่อแล้ว", "เปิดพอร์ตแล้ว กำลังตรวจสอบว่า firmware ตอบรับหรือไม่");
+    void readSerialPort(selectedPort);
+    await writeSerialCommand("IDENTIFY");
+    await writeSerialCommand("STATUS");
+    await new Promise((resolve) => setTimeout(resolve, 2200));
+    if (serialPort === selectedPort && !serialDeviceInfo?.chipModel) {
+      setConnectionStatus("serial", "เชื่อมต่อแล้ว", "เปิดพอร์ตได้ แต่ไม่พบคำตอบ IDENTIFY อาจยังไม่ได้แฟลช firmware ที่รองรับ");
+    }
+  } catch (error) {
+    let cleanupMessage = "";
+    if (selectedPort) {
+      if (serialDisconnectHandler) selectedPort.removeEventListener("disconnect", serialDisconnectHandler);
+      try {
+        if (serialReader) await serialReader.cancel();
+        await selectedPort.close();
+      } catch (closeError) {
+        cleanupMessage = ` และปิดพอร์ตหลังเกิดข้อผิดพลาดไม่สำเร็จ: ${closeError.message}`;
+      }
+    }
+    serialPort = null;
+    serialReader = null;
+    clearSerialDeviceFacts();
+    serialDisconnectHandler = null;
+    const message = error.name === "NotFoundError"
+      ? "ยกเลิกการเลือกพอร์ต หรือไม่พบพอร์ตที่เลือก"
+      : `เชื่อมต่อ USB/Serial ไม่สำเร็จ: ${error.message}${cleanupMessage}`;
+    setConnectionStatus("serial", error.name === "NotFoundError" ? "ยังไม่ได้เชื่อมต่อ" : "เกิดข้อผิดพลาด", message);
+  }
+}
+
+async function disconnectSerialDevice() {
+  const port = serialPort;
+  serialPort = null;
+  if (!port) {
+    setConnectionStatus("serial", "ยังไม่ได้เชื่อมต่อ", "ยังไม่มีพอร์ตที่เชื่อมต่อ");
+    return;
+  }
+  if (serialDisconnectHandler) port.removeEventListener("disconnect", serialDisconnectHandler);
+  try {
+    if (serialReader) await serialReader.cancel();
+    if (port.readable || port.writable) await port.close();
+    setConnectionStatus("serial", "ยังไม่ได้เชื่อมต่อ", "ยกเลิกการเชื่อมต่อ USB/Serial แล้ว");
+  } catch (error) {
+    setConnectionStatus("serial", "เกิดข้อผิดพลาด", `ปิดพอร์ตไม่สำเร็จ: ${error.message}`);
+  } finally {
+    serialReader = null;
+    clearSerialDeviceFacts();
+    serialDisconnectHandler = null;
+  }
+}
+
+async function checkCloudDeviceStatus() {
+  const apiBase = String(window.GEMSTONE_DEVICE_CONFIG?.apiBase || "").trim().replace(/\/+$/, "");
+  if (!apiBase) {
+    setConnectionStatus("cloud", "เกิดข้อผิดพลาด", "ยังไม่ได้ตั้งค่า URL ของ Cloudflare Worker");
+    return;
+  }
+  setConnectionStatus("cloud", "กำลังตรวจสอบ", "กำลังอ่านสถานะจากบริการกลาง");
+  try {
+    const response = await fetch(`${apiBase}/api/status`, { headers: { accept: "application/json" }, cache: "no-store" });
+    if (!response.ok) throw new Error(`บริการตอบกลับ HTTP ${response.status}`);
+    const status = await response.json();
+    const online = status.deviceOnline === true;
+    const details = [
+      `Worker ${status.remoteControlEnabled ? "เปิด" : "ปิด"}การควบคุมระยะไกล`,
+      `บอร์ด ${online ? "ออนไลน์" : "ยังไม่ออนไลน์"}`,
+      `มอเตอร์ ${status.motorReady ? "พร้อม" : "ยังไม่พร้อม"}`
+    ];
+    setConnectionStatus("cloud", online ? "ออนไลน์" : "ยังไม่ออนไลน์", details.join(" · "));
+    const facts = document.querySelector("#cloud-device-facts");
+    if (facts) {
+      const entries = [
+        ["บอร์ด", online ? "ออนไลน์" : "ยังไม่รายงานตัว"],
+        ["มอเตอร์", status.motorReady ? "พร้อม" : "ยังไม่พร้อม"],
+        ["firmware", status.firmware || "ยังไม่มีข้อมูล"],
+        ["อัปเดตล่าสุด", status.lastSeen ? new Date(status.lastSeen).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" }) : "ยังไม่มี heartbeat"]
+      ];
+      facts.innerHTML = entries.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join("");
+      facts.hidden = false;
+    }
+  } catch (error) {
+    setConnectionStatus("cloud", "เกิดข้อผิดพลาด", `ตรวจสอบ Worker ไม่สำเร็จ: ${error.message}`);
+  }
+}
+
 function navigate(route) {
   const next = route.replace(/^#/, "");
   if (location.hash.slice(1) === next) {
@@ -967,7 +1260,9 @@ function navigate(route) {
 function render() {
   clearTimeout(turntablePollTimer);
   const route = location.hash.slice(1) || "home";
+  const previousRoute = currentRoute;
   currentRoute = route;
+  if (previousRoute === "device" && route !== "device" && serialPort) void disconnectSerialDevice();
   const [page, ...rest] = route.split("/");
   if (page === "home") shell(homePage());
   else if (page === "catalog") shell(catalogPage());
@@ -980,6 +1275,10 @@ function render() {
   else if (page === "admin" && rest[0] === "content") shell(contentAdminPage(), { admin: true });
   else if (page === "admin") shell(adminPage(), { admin: true });
   else if (page === "dashboard") shell(dashboardPage(), { admin: true });
+  else if (page === "device") {
+    shell(devicePage(), { admin: true });
+    if (currentUser?.role === "admin") void checkCloudDeviceStatus();
+  }
   else shell(homePage());
 }
 
@@ -1244,6 +1543,19 @@ function onClick(event) {
       if (output) output.innerHTML = renderReportContent(currentReport, start, end, memberId);
       break;
     }
+    case "connect-serial": void connectSerialDevice(); break;
+    case "disconnect-serial": void disconnectSerialDevice(); break;
+    case "serial-status":
+      if (serialPort) {
+        void writeSerialCommand("IDENTIFY").then(() => writeSerialCommand("STATUS"))
+          .catch((error) => setConnectionStatus("serial", "เกิดข้อผิดพลาด", `ส่งคำขอสถานะไม่สำเร็จ: ${error.message}`));
+      }
+      break;
+    case "serial-stop":
+      if (serialPort) void writeSerialCommand("STOP")
+        .catch((error) => setConnectionStatus("serial", "เกิดข้อผิดพลาด", `ส่งคำสั่งหยุดไม่สำเร็จ: ${error.message}`));
+      break;
+    case "check-cloud-device": void checkCloudDeviceStatus(); break;
     case "select-photo":
       currentDetailImage = Number(target.dataset.index || 0);
       render();

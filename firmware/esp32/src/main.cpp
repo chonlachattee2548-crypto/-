@@ -199,10 +199,21 @@ void readSerialCommands() {
   if (!Serial.available()) return;
   String command = Serial.readStringUntil('\n');
   command.trim();
-  if (command.equalsIgnoreCase("STATUS")) {
+  if (command.equalsIgnoreCase("IDENTIFY")) {
     Serial.printf(
-      "{\"firmware\":\"%s\",\"wifiConnected\":%s,\"motorReady\":%s,\"remoteControlEnabled\":%s,\"motorOutputEnabled\":%s}\n",
+      "{\"event\":\"identify\",\"protocolVersion\":1,\"chipModel\":\"%s\",\"chipRevision\":%u,\"chipCores\":%u,\"flashBytes\":%u,\"psramBytes\":%u,\"boardProfile\":\"esp32-s3-devkitc-1\",\"firmware\":\"%s\"}\n",
+      ESP.getChipModel(),
+      static_cast<unsigned>(ESP.getChipRevision()),
+      static_cast<unsigned>(ESP.getChipCores()),
+      static_cast<unsigned>(ESP.getFlashChipSize()),
+      static_cast<unsigned>(ESP.getPsramSize()),
+      FIRMWARE_VERSION
+    );
+  } else if (command.equalsIgnoreCase("STATUS")) {
+    Serial.printf(
+      "{\"event\":\"status\",\"firmware\":\"%s\",\"chipModel\":\"%s\",\"boardProfile\":\"esp32-s3-devkitc-1\",\"wifiConnected\":%s,\"motorReady\":%s,\"remoteControlEnabled\":%s,\"motorOutputEnabled\":%s}\n",
       FIRMWARE_VERSION,
+      ESP.getChipModel(),
       WiFi.status() == WL_CONNECTED ? "true" : "false",
       motorReady ? "true" : "false",
       remoteControlReady ? "true" : "false",
