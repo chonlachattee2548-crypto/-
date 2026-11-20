@@ -1484,10 +1484,10 @@ function showroomApiError(response, data) {
   if (response.status === 401) return "รหัสผ่านส่วนดูข้อมูลไม่ถูกต้อง";
   if (response.status === 503) return "ยังไม่ได้ตั้งค่าบัญชีอ่านข้อมูล ThingsBoard หรือรหัสผ่านส่วนดูข้อมูลใน Cloudflare Worker";
   if (data?.upstreamStatus === 401) {
-    return "ThingsBoard ไม่ยอมรับอีเมลหรือรหัสผ่านบัญชีใน THINGSBOARD_USERNAME/THINGSBOARD_PASSWORD";
+    return "ThingsBoard ไม่ยอมรับ API key หรือบัญชีที่ตั้งใน Cloudflare ตรวจว่าคีย์ยังใช้งานได้และคัดลอกมาครบ";
   }
   if (data?.upstreamStatus === 403) {
-    return "ThingsBoard เข้าถึงคำขอนี้ไม่ได้ บัญชีอาจไม่มีสิทธิ์อ่าน asset หรืออุปกรณ์";
+    return "ThingsBoard ปฏิเสธสิทธิ์อ่าน asset หรืออุปกรณ์ของบัญชี/API key นี้";
   }
   if (data?.upstreamStatus === 404) {
     return "ThingsBoard ไม่พบ asset หรืออุปกรณ์ตามข้อมูลใน dashboard export";

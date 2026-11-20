@@ -51,18 +51,18 @@ USB-to-Serial ใช้ตรวจพบชิปแปลงพอร์ตไ
 
 ก่อนเปิดใช้งาน:
 
-1. ใน ThingsBoard สร้าง Customer สำหรับตู้โชว์ แล้วกำหนด asset และอุปกรณ์ที่เกี่ยวข้องให้ Customer นี้
-2. สร้าง Customer user เฉพาะสำหรับอ่านข้อมูล โดยใช้บัญชีที่มีสิทธิ์เฉพาะ Customer ดังกล่าว และเปิดใช้งานบัญชีนั้น
-3. ใน Cloudflare Worker จะเข้าสู่ระบบ ThingsBoard ด้วยอีเมลและรหัสผ่านของ Customer user เพื่ออ่านข้อมูล โดยเก็บข้อมูลเข้าสู่ระบบเป็น Worker secrets เท่านั้น ไม่ใช้ JWT ที่คัดลอกจากหน้าเว็บ เพราะ JWT หมดอายุ
+1. ตรวจว่า account ที่สร้าง API key อ่าน asset และอุปกรณ์ของตู้โชว์ได้ หากต้องการจำกัดสิทธิ์ ให้สร้าง Customer user สำหรับอ่านข้อมูล แล้วสร้าง API key ให้ user นั้น
+2. ใน ThingsBoard เปิด **Account > Security > API keys > Manage > Generate** แล้วคัดลอก API key ที่แสดงไว้ทันที คีย์มีสิทธิ์เท่ากับ account ที่สร้างคีย์
+3. Worker จะใช้ API key ผ่านส่วนหัว `X-Authorization: ApiKey <คีย์>` โดยตรง หากไม่ได้ตั้ง `THINGSBOARD_API_KEY` จึงจะใช้ `THINGSBOARD_USERNAME` และ `THINGSBOARD_PASSWORD` เป็นทางเลือกสำรอง
 4. สร้างรหัสผ่านสุ่มยาวสำหรับหน้าเว็บด้วยคำสั่งนี้ใน PowerShell:
 
    ```powershell
    py -c "import secrets; print(secrets.token_urlsafe(32))"
    ```
 
-5. ใน Cloudflare Dashboard เปิด Worker `jewelry-gemstone-control` แล้วเพิ่ม Worker secrets:
-   - `THINGSBOARD_USERNAME`: อีเมลของ Customer user ที่สร้างไว้
-   - `THINGSBOARD_PASSWORD`: รหัสผ่านของ Customer user
+5. ใน Cloudflare Dashboard เปิด Worker `jewelry-gemstone-control` แล้วตั้ง Worker secrets:
+   - `THINGSBOARD_API_KEY`: API key จากขั้นตอนที่ 2
+   - `THINGSBOARD_USERNAME` และ `THINGSBOARD_PASSWORD`: ใช้เป็นทางเลือกสำรองเมื่อไม่ได้ตั้ง API key
    - `SHOWROOM_DASHBOARD_PASSWORD`: รหัสสุ่มจากขั้นตอนก่อนหน้า ใช้กรอกหน้า **ความปลอดภัยตู้โชว์**
 6. ตรวจ `THINGSBOARD_URL` และ `SHOWROOM_ASSET_ID` ใน `wrangler.toml` ให้เป็น instance และ asset id ของ dashboard ที่ export มา
 7. เปิด GitHub Actions แล้วรัน workflow **เผยแพร่บริการกลาง Cloudflare** หลังเพิ่ม secrets

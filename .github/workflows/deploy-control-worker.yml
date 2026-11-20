@@ -1,6 +1,13 @@
 name: เผยแพร่บริการกลาง Cloudflare
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "worker/**"
+      - "wrangler.toml"
+      - ".github/workflows/deploy-control-worker.yml"
   workflow_dispatch:
 
 permissions:

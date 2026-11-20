@@ -138,13 +138,19 @@ async function thingsBoardLogin(env) {
   return session.token;
 }
 
-async function thingsBoardGet(env, path, token) {
+async function thingsBoardAuthorization(env) {
+  const apiKey = String(env.THINGSBOARD_API_KEY || "").trim();
+  if (apiKey) return `ApiKey ${apiKey}`;
+  return `Bearer ${await thingsBoardLogin(env)}`;
+}
+
+async function thingsBoardGet(env, path, authorization) {
   const baseUrl = thingsBoardBaseUrl(env);
   const url = new URL(path, `${baseUrl.origin}/`);
   const response = await fetch(url, {
     headers: {
       accept: "application/json",
-      "X-Authorization": `Bearer ${token}`
+      "X-Authorization": authorization
     }
   });
   if (!response.ok) {
@@ -204,10 +210,12 @@ function showroomAlerts(device) {
 }
 
 async function showroomSecurityData(env) {
+  const apiKey = String(env.THINGSBOARD_API_KEY || "").trim();
   const username = String(env.THINGSBOARD_USERNAME || "").trim();
   const password = String(env.THINGSBOARD_PASSWORD || "");
   const assetId = String(env.SHOWROOM_ASSET_ID || "");
-  if (!username || !password || !assetId || String(env.SHOWROOM_DASHBOARD_PASSWORD || "").length < 32) {
+  if ((!apiKey && (!username || !password)) || !assetId
+    || String(env.SHOWROOM_DASHBOARD_PASSWORD || "").length < 32) {
     return jsonResponse({ error: "showroom_api_not_configured" }, 503, { "cache-control": "no-store" });
   }
 
@@ -219,8 +227,8 @@ async function showroomSecurityData(env) {
   }).toString();
 
   try {
-    const accessToken = await thingsBoardLogin(env);
-    const relations = await thingsBoardGet(env, `/api/relations?${relationsQuery}`, accessToken);
+    const authorization = await thingsBoardAuthorization(env);
+    const relations = await thingsBoardGet(env, `/api/relations?${relationsQuery}`, authorization);
     const targets = (Array.isArray(relations) ? relations : [])
       .filter((relation) => relation.from?.id === assetId && relation.to?.entityType === "DEVICE")
       .map((relation) => relation.to.id)
@@ -241,10 +249,10 @@ async function showroomSecurityData(env) {
         orderBy: "ASC"
       });
       const [deviceInfo, latest, attributes, history] = await Promise.all([
-        thingsBoardGet(env, `/api/device/${encodedId}`, accessToken),
-        thingsBoardGet(env, `/api/plugins/telemetry/DEVICE/${encodedId}/values/timeseries?${latestQuery}`, accessToken),
-        thingsBoardGet(env, `/api/plugins/telemetry/DEVICE/${encodedId}/values/attributes?${attributeQuery}`, accessToken),
-        thingsBoardGet(env, `/api/plugins/telemetry/DEVICE/${encodedId}/values/timeseries?${historyQuery}`, accessToken)
+        thingsBoardGet(env, `/api/device/${encodedId}`, authorization),
+        thingsBoardGet(env, `/api/plugins/telemetry/DEVICE/${encodedId}/values/timeseries?${latestQuery}`, authorization),
+        thingsBoardGet(env, `/api/plugins/telemetry/DEVICE/${encodedId}/values/attributes?${attributeQuery}`, authorization),
+        thingsBoardGet(env, `/api/plugins/telemetry/DEVICE/${encodedId}/values/timeseries?${historyQuery}`, authorization)
       ]);
       const attributeList = Array.isArray(attributes) ? attributes : [];
       const active = latestAttribute(attributeList, "active", valueAsBoolean).value;
