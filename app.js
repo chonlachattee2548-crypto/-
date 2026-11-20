@@ -93,6 +93,7 @@ let showroomAccessPassword = "";
 let showroomSecurityData = null;
 let showroomSecurityError = "";
 let showroomSecurityLoading = false;
+let showroomUseLiveData = false;
 let showroomSelectedDevice = 0;
 
 function readStore(key, fallback) {
@@ -986,6 +987,7 @@ function devicePage() {
       <h1>ศูนย์เชื่อมต่อบอร์ด</h1>
       <p class="lede">ตรวจสอบบอร์ดผ่าน USB/Serial หรือดูสถานะอุปกรณ์ที่เชื่อมอินเทอร์เน็ตกับบริการกลาง</p>
       <div class="notice notice-warning device-safety-note" role="note"><strong>โหมดตรวจสอบอย่างปลอดภัย</strong><br>หน้านี้อ่านข้อมูลบอร์ดและส่งได้เฉพาะ IDENTIFY, STATUS และ STOP ไม่มีคำสั่งเริ่มหมุน มอเตอร์จริงยังปิดใน firmware</div>
+      <div class="notice notice-info device-profile-note" role="note"><strong>รุ่นจากรายการชิ้นส่วน:</strong> ESP32-S3-WROOM-1-N16R8 พร้อม Flash 16 MB และ PSRAM 8 MB บนแผงวงจรของคุณ<br>หน้าเว็บจะแสดงรุ่นนี้เมื่อ firmware โปรไฟล์ที่รองรับตอบกลับทาง USB/Serial ยังต้องตรวจผังวงจรเพื่อยืนยันการต่อ USB, GPIO และอุปกรณ์อื่นก่อนเปิดควบคุมจริง</div>
       <div class="device-connect-grid">
         <section class="data-panel device-connect-panel" aria-labelledby="usb-connect-title">
           <div class="device-panel-heading"><span class="device-icon" aria-hidden="true">⌁</span><div><h2 id="usb-connect-title">เชื่อมต่อ USB / Serial</h2><p id="serial-support">${escapeHtml(supportText)}</p></div></div>
@@ -1001,7 +1003,7 @@ function devicePage() {
             <button type="button" class="button button-danger button-small" data-action="serial-stop" disabled>ส่งคำสั่งหยุด</button>
             <button type="button" class="button button-quiet button-small" data-action="disconnect-serial" hidden>ยกเลิกการเชื่อมต่อ</button>
           </div>
-          <p class="field-hint">พอร์ต USB ที่พบเป็นชิปแปลง USB-to-Serial ได้ ไม่ได้ยืนยันรุ่นบอร์ดหรือขา GPIO ตัวตนจะแสดงเมื่อ firmware ที่รองรับตอบกลับเท่านั้น</p>
+          <p class="field-hint">พอร์ต USB ที่พบเป็นชิปแปลง USB-to-Serial ได้ ไม่ได้ยืนยันรุ่นบอร์ดหรือขา GPIO รายการชิ้นส่วนยังไม่ยืนยันว่า USB-B ต่อแบบใด</p>
         </section>
         <section class="data-panel device-connect-panel" aria-labelledby="wifi-connect-title">
           <div class="device-panel-heading"><span class="device-icon device-icon-network" aria-hidden="true">⌁</span><div><h2 id="wifi-connect-title">สถานะผ่าน Wi-Fi / อินเทอร์เน็ต</h2><p>ตรวจจาก heartbeat ที่บอร์ดส่งถึง Cloudflare Worker</p></div></div>
@@ -1048,12 +1050,12 @@ function showroomMetric(value, decimals = 1, unit = "") {
       })}${unit}` : "ยังไม่มีข้อมูล";
 }
 
-function showroomTrendChart(device) {
+function showroomTrendChart(device, sourceLabel = "ThingsBoard") {
       const vibration = device.history?.vibration || [];
       const dailyMax = device.history?.dailyMaxVibration || [];
       const threshold = device.maxVibrationThreshold?.value;
       if (!vibration.length && !dailyMax.length) {
-        return `<section class="data-panel security-chart"><h2>แนวโน้มแรงสั่นสะเทือน · 7 วัน</h2>${emptyState("ยังไม่มีข้อมูลกราฟ", "กราฟจะแสดงเมื่ออุปกรณ์ส่ง vibration หรือ dailyMaxVibration มายัง ThingsBoard")}</section>`;
+        return `<section class="data-panel security-chart"><h2>แนวโน้มแรงสั่นสะเทือน · 7 วัน</h2>${emptyState("ยังไม่มีข้อมูลกราฟ", `กราฟจะแสดงเมื่อมีข้อมูลจาก ${escapeHtml(sourceLabel)}`)}</section>`;
       }
       const width = 760;
       const height = 250;
@@ -1092,7 +1094,7 @@ function showroomTrendChart(device) {
       const vibrationPath = vibrationPoints.length ? `<path class="chart-line" d="${toPath(vibrationPoints)}"></path>` : "";
       const dailyPath = dailyPoints.length ? `<path class="security-daily-line" d="${toPath(dailyPoints)}"></path>` : "";
       return `<figure class="data-panel security-chart">
-        <figcaption class="chart-heading"><div><h2>แนวโน้มแรงสั่นสะเทือน · ${escapeHtml(device.name)}</h2><p>ข้อมูลจาก ThingsBoard ย้อนหลัง 7 วัน · หน่วย mm/s</p></div></figcaption>
+        <figcaption class="chart-heading"><div><h2>แนวโน้มแรงสั่นสะเทือน · ${escapeHtml(device.name)}</h2><p>${escapeHtml(sourceLabel)} ย้อนหลัง 7 วัน · หน่วย mm/s</p></div></figcaption>
         <div class="security-legend"><span><i></i>แรงสั่นสะเทือน</span><span class="security-legend-daily"><i></i>ค่าสูงสุดรายวัน</span>${Number.isFinite(threshold) ? `<span class="security-legend-threshold"><i></i>เกณฑ์ ${showroomMetric(threshold)} mm/s</span>` : ""}</div>
         <svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="กราฟแรงสั่นสะเทือนของ ${escapeHtml(device.name)} ย้อนหลัง 7 วัน" preserveAspectRatio="none">
           ${grid}${thresholdLine}${vibrationPath}${dailyPath}
@@ -1103,8 +1105,62 @@ function showroomTrendChart(device) {
       </figure>`;
 }
 
-function showroomSecurityResults() {
-      const devices = Array.isArray(showroomSecurityData?.devices) ? showroomSecurityData.devices : [];
+function demoShowroomSecurityData() {
+      const now = Date.now();
+      const telemetry = (value, minutesAgo = 5) => ({ value, ts: now - minutesAgo * 60_000 });
+      const history = (values) => values.map((value, index) => ({
+        ts: now - (values.length - index - 1) * 24 * 60 * 60_000,
+        value
+      }));
+      const makeDevice = (key, name, values) => ({
+        key,
+        name,
+        active: true,
+        authorized: telemetry(values.authorized),
+        itemPresent: telemetry(values.itemPresent),
+        coverOpen: telemetry(values.coverOpen),
+        weight: telemetry(values.weight),
+        vibration: telemetry(values.vibration),
+        battery: telemetry(values.battery),
+        dailyMaxVibration: telemetry(values.dailyMaxVibration),
+        maxVibrationThreshold: telemetry(0.5),
+        status: values.status,
+        alerts: values.alerts,
+        lastSeen: now - 60_000,
+        history: {
+          vibration: history(values.vibrationHistory),
+          dailyMaxVibration: history(values.dailyMaxHistory)
+        }
+      });
+      return {
+        updatedAt: now,
+        devices: [
+          makeDevice(0, "Diamond Pedestal 01 - Hope Star", {
+            authorized: true, itemPresent: true, coverOpen: false, weight: 2.4,
+            vibration: 0.12, battery: 94, dailyMaxVibration: 0.28, status: "secure", alerts: [],
+            vibrationHistory: [0.09, 0.12, 0.1, 0.14, 0.11, 0.12, 0.15],
+            dailyMaxHistory: [0.21, 0.24, 0.2, 0.28, 0.19, 0.22, 0.25]
+          }),
+          makeDevice(1, "Diamond Pedestal 02 - Royal Blue", {
+            authorized: true, itemPresent: true, coverOpen: true, weight: 1.8,
+            vibration: 0.82, battery: 87, dailyMaxVibration: 0.82, status: "attention",
+            alerts: ["ฝาครอบตู้เปิดอยู่", "แรงสั่นสะเทือนเกินค่าที่กำหนด"],
+            vibrationHistory: [0.11, 0.13, 0.12, 0.2, 0.31, 0.55, 0.82],
+            dailyMaxHistory: [0.25, 0.22, 0.28, 0.32, 0.4, 0.62, 0.82]
+          }),
+          makeDevice(2, "Diamond Pedestal 03 - Imperial Crown", {
+            authorized: false, itemPresent: false, coverOpen: false, weight: 0,
+            vibration: 0.05, battery: 100, dailyMaxVibration: 0.18, status: "attention",
+            alerts: ["ตรวจพบการเข้าถึงที่ไม่ได้รับอนุญาต", "ไม่พบเครื่องประดับบนแท่น"],
+            vibrationHistory: [0.04, 0.05, 0.05, 0.06, 0.04, 0.05, 0.05],
+            dailyMaxHistory: [0.12, 0.15, 0.14, 0.18, 0.13, 0.16, 0.15]
+          })
+        ]
+      };
+}
+
+function showroomSecurityResults(data, sourceLabel = "ThingsBoard") {
+      const devices = Array.isArray(data?.devices) ? data.devices : [];
       const alerts = devices.flatMap((device) => (device.alerts || []).map((alert) => ({ name: device.name, message: alert })));
       const selected = devices.find((device) => device.key === showroomSelectedDevice) || devices[0];
       const securityRows = devices.map((device) => {
@@ -1137,12 +1193,12 @@ function showroomSecurityResults() {
           <div class="metric"><span>ต้องตรวจสอบ</span><strong>${devices.filter((device) => device.alerts?.length).length}</strong></div>
         </div>
         <section class="data-panel">
-          <div class="security-section-heading"><div><h2>สถานะอุปกรณ์</h2><p>ค่าล่าสุดจาก ThingsBoard REST API</p></div></div>
+          <div class="security-section-heading"><div><h2>สถานะอุปกรณ์</h2><p>ค่าล่าสุดจาก ${escapeHtml(sourceLabel)}</p></div></div>
           <div class="table-wrap"><table class="security-table"><thead><tr><th>แท่น</th><th>สถานะ</th><th>การอนุญาต</th><th>ฝาครอบ</th><th>เครื่องประดับ</th><th>แรงสั่น</th><th>น้ำหนัก</th><th>แบตเตอรี่</th><th>กราฟ</th></tr></thead>
           <tbody>${securityRows || `<tr><td colspan="9">${emptyState("ยังไม่พบแท่นจัดแสดง", "ตรวจสอบว่า asset ใน ThingsBoard มีอุปกรณ์เชื่อมด้วย relation jewelryShowroomTodiamondPedestal และ API user มีสิทธิ์อ่านอุปกรณ์")}</td></tr>`}</tbody></table></div>
         </section>
         <section class="notice ${alertTone} security-alerts" role="status"><strong>เงื่อนไขเตือนจากข้อมูลล่าสุด</strong>${alertContent}</section>
-        ${selected ? showroomTrendChart(selected) : ""}`;
+        ${selected ? showroomTrendChart(selected, sourceLabel) : ""}`;
 }
 
 function showroomSecurityPage() {
@@ -1150,30 +1206,38 @@ function showroomSecurityPage() {
         navigate(currentUser ? "home" : "login");
         return "";
       }
-      const errorNote = showroomSecurityError
+      const liveData = showroomUseLiveData && showroomSecurityData;
+      const errorNote = showroomUseLiveData && showroomSecurityError
         ? `<div class="notice notice-danger security-feedback" role="alert">${escapeHtml(showroomSecurityError)}</div>`
         : "";
-      const content = showroomSecurityData
-        ? `${showroomSecurityResults()}
+      const content = liveData
+        ? `${showroomSecurityResults(showroomSecurityData)}
           <div class="security-data-meta">อัปเดตจาก ThingsBoard: ${escapeHtml(showroomTimestamp(showroomSecurityData.updatedAt))}</div>`
-        : `<section class="data-panel security-access-panel">
+        : showroomUseLiveData
+          ? `<section class="data-panel security-access-panel">
             <h2>ยืนยันสิทธิ์ดูข้อมูล</h2>
             <p>ป้อนรหัสผ่านส่วนดูข้อมูลที่ตั้งไว้ใน Cloudflare Worker ข้อมูลนี้แยกจากบัญชีตัวอย่างในเว็บไซต์ และจะอยู่ในหน่วยความจำของแท็บนี้เท่านั้น</p>
             <form class="security-access-form" id="showroom-access-form">
               <label class="field"><span class="field-label">รหัสผ่านส่วนดูข้อมูล</span><input class="form-control" name="showroomPassword" type="password" autocomplete="off" required minlength="32" maxlength="128"></label>
               <button class="button button-primary" type="submit" ${showroomSecurityLoading ? "disabled" : ""}>${showroomSecurityLoading ? "กำลังเชื่อมต่อ…" : "เชื่อมต่อ ThingsBoard API"}</button>
             </form>
-          </section>`;
-      const actions = showroomSecurityData
-        ? `<div class="security-toolbar"><span>ข้อมูลอ่านอย่างเดียวจากโปรเจกต์ Showroom Security Management</span><div><button class="button button-secondary" type="button" data-action="refresh-showroom-security" ${showroomSecurityLoading ? "disabled" : ""}>${showroomSecurityLoading ? "กำลังอัปเดต…" : "อัปเดตข้อมูลล่าสุด"}</button><button class="button button-quiet" type="button" data-action="lock-showroom-security">ล็อกข้อมูล</button></div></div>`
-        : "";
+            <button class="button button-quiet" type="button" data-action="use-showroom-demo">กลับสู่ข้อมูลตัวอย่าง</button>
+          </section>`
+          : `${showroomSecurityResults(demoShowroomSecurityData(), "ข้อมูลตัวอย่าง")}
+            <div class="security-data-meta">ข้อมูลสำหรับนำเสนอ ไม่ได้ดึงจาก ThingsBoard</div>`;
+      const actions = liveData
+        ? `<div class="security-toolbar"><span>ข้อมูลอ่านอย่างเดียวจากโปรเจกต์ Showroom Security Management</span><div><button class="button button-secondary" type="button" data-action="refresh-showroom-security" ${showroomSecurityLoading ? "disabled" : ""}>${showroomSecurityLoading ? "กำลังอัปเดต…" : "อัปเดตข้อมูลล่าสุด"}</button><button class="button button-quiet" type="button" data-action="lock-showroom-security">กลับสู่ข้อมูลตัวอย่าง</button></div></div>`
+        : !showroomUseLiveData
+          ? `<div class="security-toolbar"><span>ข้อมูลตัวอย่างแสดงได้ทันทีโดยไม่ต้องเชื่อมต่อระบบจริง</span><div><button class="button button-secondary" type="button" data-action="connect-showroom-live">เชื่อมต่อ ThingsBoard จริง</button></div></div>`
+          : `<div class="security-toolbar"><span>กำลังใช้ข้อมูล ThingsBoard จริง</span></div>`;
       return `<div class="container"><div class="admin-shell">${adminNav("security")}
         <section class="admin-content security-dashboard">
-          <p class="eyebrow">ThingsBoard · REST API</p>
+          <p class="eyebrow">${showroomUseLiveData ? "ThingsBoard · REST API" : "ข้อมูลตัวอย่าง · โหมดนำเสนอ"}</p>
           <h1>ความปลอดภัยตู้โชว์</h1>
           <p class="lede">สถานะฝาครอบ การอนุญาต แรงสั่นสะเทือน และแบตเตอรี่ของแท่นจัดแสดง</p>
+          ${!showroomUseLiveData ? '<div class="notice notice-info security-feedback" role="note"><strong>ข้อมูลจำลองสำหรับงานนำเสนอ</strong><br>หน้านี้ไม่ใช่สถานะจากอุปกรณ์จริง การเชื่อม ThingsBoard ทำได้แยกต่างหากเมื่อเลือก</div>' : ""}
           ${errorNote}${actions}${content}
-          <p class="field-hint security-source-note">กราฟและสถานะนี้อ่านจาก telemetry ใน ThingsBoard โดยตรง รายการเตือนคำนวณจากค่าล่าสุดและเกณฑ์ที่ตั้งไว้ในอุปกรณ์</p>
+          <p class="field-hint security-source-note">${showroomUseLiveData ? "ข้อมูลจริงอ่านจาก ThingsBoard ผ่าน Cloudflare Worker และยังต้องยืนยันสิทธิ์" : "ข้อมูลและกราฟตัวอย่างใช้สาธิตรูปแบบการทำงาน ไม่ได้บันทึกหรือส่งคำสั่งไปยังอุปกรณ์"}</p>
         </section></div></div>`;
 }
 
@@ -1192,6 +1256,11 @@ function setConnectionStatus(kind, state, message) {
   document.querySelector('[data-action="disconnect-serial"]')?.toggleAttribute("hidden", !connected);
 }
 
+function deviceProfileLabel(profile) {
+  if (profile === "esp32-s3-wroom-1-n16r8") return "ESP32-S3-WROOM-1-N16R8";
+  return profile || "";
+}
+
 function renderSerialDeviceFacts(info) {
   const facts = document.querySelector("#serial-device-facts");
   if (!facts) return;
@@ -1201,7 +1270,7 @@ function renderSerialDeviceFacts(info) {
     ["จำนวนแกนประมวลผล", info.chipCores],
     ["Flash", info.flashBytes ? `${(Number(info.flashBytes) / 1_048_576).toFixed(0)} MB` : ""],
     ["PSRAM", info.psramBytes ? `${(Number(info.psramBytes) / 1_048_576).toFixed(0)} MB` : ""],
-    ["โปรไฟล์ firmware", info.boardProfile],
+    ["โมดูล / โปรไฟล์ firmware", deviceProfileLabel(info.boardProfile)],
     ["เวอร์ชัน firmware", info.firmware],
     ["รุ่นโปรโตคอล", info.protocolVersion],
     ["USB-to-Serial Vendor ID", info.usbVendorId ? `0x${Number(info.usbVendorId).toString(16).padStart(4, "0")}` : ""],
@@ -1475,6 +1544,7 @@ function render() {
     showroomSecurityData = null;
     showroomSecurityError = "";
     showroomSecurityLoading = false;
+    showroomUseLiveData = false;
   }
   const [page, ...rest] = route.split("/");
   if (page === "home") shell(homePage());
@@ -1771,10 +1841,18 @@ function onClick(event) {
       break;
     case "check-cloud-device": void checkCloudDeviceStatus(); break;
     case "refresh-showroom-security": void loadShowroomSecurity(showroomAccessPassword); break;
+    case "connect-showroom-live":
+      showroomUseLiveData = true;
+      showroomSecurityError = "";
+      render();
+      break;
+    case "use-showroom-demo":
     case "lock-showroom-security":
       showroomAccessPassword = "";
       showroomSecurityData = null;
       showroomSecurityError = "";
+      showroomSecurityLoading = false;
+      showroomUseLiveData = false;
       render();
       break;
     case "select-showroom-device":

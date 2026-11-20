@@ -14,6 +14,7 @@
 
 namespace {
 constexpr char FIRMWARE_VERSION[] = "0.1.0";
+constexpr char BOARD_PROFILE[] = "esp32-s3-wroom-1-n16r8";
 constexpr bool REMOTE_CONTROL_ENABLED = false;
 constexpr bool MOTOR_OUTPUT_ENABLED = false;
 constexpr int SERVO_PIN = -1;
@@ -201,19 +202,21 @@ void readSerialCommands() {
   command.trim();
   if (command.equalsIgnoreCase("IDENTIFY")) {
     Serial.printf(
-      "{\"event\":\"identify\",\"protocolVersion\":1,\"chipModel\":\"%s\",\"chipRevision\":%u,\"chipCores\":%u,\"flashBytes\":%u,\"psramBytes\":%u,\"boardProfile\":\"esp32-s3-devkitc-1\",\"firmware\":\"%s\"}\n",
+      "{\"event\":\"identify\",\"protocolVersion\":1,\"chipModel\":\"%s\",\"chipRevision\":%u,\"chipCores\":%u,\"flashBytes\":%u,\"psramBytes\":%u,\"boardProfile\":\"%s\",\"firmware\":\"%s\"}\n",
       ESP.getChipModel(),
       static_cast<unsigned>(ESP.getChipRevision()),
       static_cast<unsigned>(ESP.getChipCores()),
       static_cast<unsigned>(ESP.getFlashChipSize()),
       static_cast<unsigned>(ESP.getPsramSize()),
+      BOARD_PROFILE,
       FIRMWARE_VERSION
     );
   } else if (command.equalsIgnoreCase("STATUS")) {
     Serial.printf(
-      "{\"event\":\"status\",\"firmware\":\"%s\",\"chipModel\":\"%s\",\"boardProfile\":\"esp32-s3-devkitc-1\",\"wifiConnected\":%s,\"motorReady\":%s,\"remoteControlEnabled\":%s,\"motorOutputEnabled\":%s}\n",
+      "{\"event\":\"status\",\"firmware\":\"%s\",\"chipModel\":\"%s\",\"boardProfile\":\"%s\",\"wifiConnected\":%s,\"motorReady\":%s,\"remoteControlEnabled\":%s,\"motorOutputEnabled\":%s}\n",
       FIRMWARE_VERSION,
       ESP.getChipModel(),
+      BOARD_PROFILE,
       WiFi.status() == WL_CONNECTED ? "true" : "false",
       motorReady ? "true" : "false",
       remoteControlReady ? "true" : "false",
