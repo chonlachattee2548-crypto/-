@@ -290,7 +290,8 @@ function header() {
        <a href="#security" ${active === "security" ? 'aria-current="page"' : ""}>ความปลอดภัยตู้โชว์</a>
        <a href="#device" ${active === "device" ? 'aria-current="page"' : ""}>เชื่อมต่อบอร์ด</a>`
     : `<a href="#catalog" ${active === "catalog" ? 'aria-current="page"' : ""}>แคตตาล็อก</a>
-       <a href="#live" ${active === "live" ? 'aria-current="page"' : ""}>ตู้โชว์อัญมณี</a>`;
+       <a href="#live" ${active === "live" ? 'aria-current="page"' : ""}>ตู้โชว์อัญมณี</a>
+       <a href="#security" ${active === "security" ? 'aria-current="page"' : ""}>ความปลอดภัยตู้โชว์</a>`;
   const accountAction = loggedIn
     ? `<button class="button button-quiet" data-action="logout">ออกจากระบบ</button>`
     : `<a class="button button-secondary" href="#login">เข้าสู่ระบบ</a><a class="button button-primary" href="#register">สมัครสมาชิก</a>`;
@@ -1202,18 +1203,21 @@ function showroomSecurityResults(data, sourceLabel = "ThingsBoard") {
 }
 
 function showroomSecurityPage() {
-      if (currentUser?.role !== "admin") {
-        navigate(currentUser ? "home" : "login");
-        return "";
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin && showroomUseLiveData) {
+        showroomUseLiveData = false;
+        showroomAccessPassword = "";
+        showroomSecurityData = null;
+        showroomSecurityError = "";
       }
-      const liveData = showroomUseLiveData && showroomSecurityData;
-      const errorNote = showroomUseLiveData && showroomSecurityError
+      const liveData = isAdmin && showroomUseLiveData && showroomSecurityData;
+      const errorNote = isAdmin && showroomUseLiveData && showroomSecurityError
         ? `<div class="notice notice-danger security-feedback" role="alert">${escapeHtml(showroomSecurityError)}</div>`
         : "";
       const content = liveData
         ? `${showroomSecurityResults(showroomSecurityData)}
           <div class="security-data-meta">อัปเดตจาก ThingsBoard: ${escapeHtml(showroomTimestamp(showroomSecurityData.updatedAt))}</div>`
-        : showroomUseLiveData
+        : isAdmin && showroomUseLiveData
           ? `<section class="data-panel security-access-panel">
             <h2>ยืนยันสิทธิ์ดูข้อมูล</h2>
             <p>ป้อนรหัสผ่านส่วนดูข้อมูลที่ตั้งไว้ใน Cloudflare Worker ข้อมูลนี้แยกจากบัญชีตัวอย่างในเว็บไซต์ และจะอยู่ในหน่วยความจำของแท็บนี้เท่านั้น</p>
@@ -1227,18 +1231,20 @@ function showroomSecurityPage() {
             <div class="security-data-meta">ข้อมูลสำหรับนำเสนอ ไม่ได้ดึงจาก ThingsBoard</div>`;
       const actions = liveData
         ? `<div class="security-toolbar"><span>ข้อมูลอ่านอย่างเดียวจากโปรเจกต์ Showroom Security Management</span><div><button class="button button-secondary" type="button" data-action="refresh-showroom-security" ${showroomSecurityLoading ? "disabled" : ""}>${showroomSecurityLoading ? "กำลังอัปเดต…" : "อัปเดตข้อมูลล่าสุด"}</button><button class="button button-quiet" type="button" data-action="lock-showroom-security">กลับสู่ข้อมูลตัวอย่าง</button></div></div>`
-        : !showroomUseLiveData
+        : isAdmin && !showroomUseLiveData
           ? `<div class="security-toolbar"><span>ข้อมูลตัวอย่างแสดงได้ทันทีโดยไม่ต้องเชื่อมต่อระบบจริง</span><div><button class="button button-secondary" type="button" data-action="connect-showroom-live">เชื่อมต่อ ThingsBoard จริง</button></div></div>`
-          : `<div class="security-toolbar"><span>กำลังใช้ข้อมูล ThingsBoard จริง</span></div>`;
-      return `<div class="container"><div class="admin-shell">${adminNav("security")}
-        <section class="admin-content security-dashboard">
+          : "";
+      const pageContent = `<section class="${isAdmin ? "admin-content " : ""}security-dashboard">
           <p class="eyebrow">${showroomUseLiveData ? "ThingsBoard · REST API" : "ข้อมูลตัวอย่าง · โหมดนำเสนอ"}</p>
           <h1>ความปลอดภัยตู้โชว์</h1>
           <p class="lede">สถานะฝาครอบ การอนุญาต แรงสั่นสะเทือน และแบตเตอรี่ของแท่นจัดแสดง</p>
-          ${!showroomUseLiveData ? '<div class="notice notice-info security-feedback" role="note"><strong>ข้อมูลจำลองสำหรับงานนำเสนอ</strong><br>หน้านี้ไม่ใช่สถานะจากอุปกรณ์จริง การเชื่อม ThingsBoard ทำได้แยกต่างหากเมื่อเลือก</div>' : ""}
+          ${!showroomUseLiveData ? `<div class="notice notice-info security-feedback" role="note"><strong>ข้อมูลจำลองสำหรับงานนำเสนอ</strong><br>หน้านี้ไม่ใช่สถานะจากอุปกรณ์จริง${isAdmin ? " ผู้ดูแลสามารถเลือกเชื่อม ThingsBoard จริงได้" : ""}</div>` : ""}
           ${errorNote}${actions}${content}
-          <p class="field-hint security-source-note">${showroomUseLiveData ? "ข้อมูลจริงอ่านจาก ThingsBoard ผ่าน Cloudflare Worker และยังต้องยืนยันสิทธิ์" : "ข้อมูลและกราฟตัวอย่างใช้สาธิตรูปแบบการทำงาน ไม่ได้บันทึกหรือส่งคำสั่งไปยังอุปกรณ์"}</p>
-        </section></div></div>`;
+          <p class="field-hint security-source-note">${showroomUseLiveData && isAdmin ? "ข้อมูลจริงอ่านจาก ThingsBoard ผ่าน Cloudflare Worker และยังต้องยืนยันสิทธิ์" : "ข้อมูลและกราฟตัวอย่างใช้สาธิตรูปแบบการทำงาน ไม่ได้บันทึกหรือส่งคำสั่งไปยังอุปกรณ์"}</p>
+        </section>`;
+      return isAdmin
+        ? `<div class="container"><div class="admin-shell">${adminNav("security")}${pageContent}</div></div>`
+        : `<div class="container">${pageContent}</div>`;
 }
 
 function setConnectionStatus(kind, state, message) {
@@ -1487,7 +1493,7 @@ function showroomApiError(response, data) {
 }
 
 async function loadShowroomSecurity(password) {
-  if (!password || showroomSecurityLoading) return;
+  if (currentUser?.role !== "admin" || !password || showroomSecurityLoading) return;
   const apiBase = String(window.GEMSTONE_DEVICE_CONFIG?.apiBase || "").trim().replace(/\/+$/, "");
   if (!apiBase) {
     showroomSecurityError = "ยังไม่ได้ตั้งค่า URL ของ Cloudflare Worker";
@@ -1842,6 +1848,7 @@ function onClick(event) {
     case "check-cloud-device": void checkCloudDeviceStatus(); break;
     case "refresh-showroom-security": void loadShowroomSecurity(showroomAccessPassword); break;
     case "connect-showroom-live":
+      if (currentUser?.role !== "admin") break;
       showroomUseLiveData = true;
       showroomSecurityError = "";
       render();
