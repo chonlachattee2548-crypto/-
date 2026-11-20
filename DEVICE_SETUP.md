@@ -35,6 +35,36 @@ USB-to-Serial ใช้ตรวจพบชิปแปลงพอร์ตไ
 
 ระบบยังไม่รองรับบอร์ดทุกรุ่นโดยอัตโนมัติ แต่ละตระกูลต้องมี firmware โปรไฟล์ build และวิธี provision เครือข่ายที่ตรงกัน การเชื่อม Wi-Fi ไม่ได้ตั้งค่า Wi-Fi ให้บอร์ดจากหน้าเว็บเอง และ ESP32-S3 ไม่มี Ethernet ในตัว
 
+## เชื่อมโปรเจกต์ ThingsBoard ด้วย REST API
+
+เมนู **ความปลอดภัยตู้โชว์** แสดงสถานะจาก dashboard export `Showroom Security Management` โดยให้ Cloudflare Worker เรียก ThingsBoard REST API แทนการเรียกจาก JavaScript ของเว็บ Worker อ่าน asset ที่ตั้งไว้ใน `wrangler.toml`, หาอุปกรณ์ที่เชื่อมด้วย relation `jewelryShowroomTodiamondPedestal`, แล้วอ่าน telemetry ย้อนหลัง 7 วัน
+
+ค่าที่ใช้ในหน้านี้:
+
+- สถานะล่าสุด: `authorized`, `itemPresent`, `coverOpen`, `weight`, `vibration`, `battery`, `dailyMaxVibration`
+- attribute: `active`, `maxVibrationThreshold`
+- กราฟ 7 วัน: `vibration` และ `dailyMaxVibration`; หน่วยแรงสั่นสะเทือนเป็น mm/s และแบตเตอรี่เป็น %
+- ข้อมูลแรงสั่นที่เกิน threshold, ฝาครอบเปิด, ไม่มีเครื่องประดับ, ไม่อนุญาต หรืออุปกรณ์ไม่ทำงาน จะแสดงเป็นเงื่อนไขเตือนจากค่าล่าสุด ไม่ใช่ประวัติ Alarm ที่อ่านจาก ThingsBoard
+
+ก่อนเปิดใช้งาน:
+
+1. ใน ThingsBoard สร้าง Customer สำหรับตู้โชว์ แล้วกำหนด asset และอุปกรณ์ที่เกี่ยวข้องให้ Customer นี้
+2. สร้าง Customer user เฉพาะสำหรับอ่านข้อมูล โดยใช้บัญชีที่มีสิทธิ์เฉพาะ Customer ดังกล่าว และเปิดใช้งานบัญชีนั้น
+3. ใน Cloudflare Worker จะเข้าสู่ระบบ ThingsBoard ด้วยอีเมลและรหัสผ่านของ Customer user เพื่ออ่านข้อมูล โดยเก็บข้อมูลเข้าสู่ระบบเป็น Worker secrets เท่านั้น ไม่ใช้ JWT ที่คัดลอกจากหน้าเว็บ เพราะ JWT หมดอายุ
+4. สร้างรหัสผ่านสุ่มยาวสำหรับหน้าเว็บด้วยคำสั่งนี้ใน PowerShell:
+
+   ```powershell
+   py -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+
+5. ใน Cloudflare Dashboard เปิด Worker `jewelry-gemstone-control` แล้วเพิ่ม Worker secrets:
+   - `THINGSBOARD_USERNAME`: อีเมลของ Customer user ที่สร้างไว้
+   - `THINGSBOARD_PASSWORD`: รหัสผ่านของ Customer user
+   - `SHOWROOM_DASHBOARD_PASSWORD`: รหัสสุ่มจากขั้นตอนก่อนหน้า ใช้กรอกหน้า **ความปลอดภัยตู้โชว์**
+6. ตรวจ `THINGSBOARD_URL` และ `SHOWROOM_ASSET_ID` ใน `wrangler.toml` ให้เป็น instance และ asset id ของ dashboard ที่ export มา
+7. เปิด GitHub Actions แล้วรัน workflow **เผยแพร่บริการกลาง Cloudflare** หลังเพิ่ม secrets
+8. เปิดเว็บ ลงชื่อเข้าใช้ผู้ดูแล แล้วเลือก **ความปลอดภัยตู้โชว์** กรอกรหัสผ่านส่วนดูข้อมูล รหัสนี้จะอยู่ในหน่วยความจำของแท็บและต้องกรอกใหม่เมื่อเปิดแท็บใหม่
+
 หลังยืนยันรุ่นบอร์ดจริงแล้ว สามารถติดตั้ง PlatformIO ใน VS Code และลอง build โดยไม่เสียบบอร์ด:
 
 ```powershell
@@ -92,5 +122,7 @@ Cloudflare Worker เผยแพร่แล้วที่ `https://jewelry-ge
 
 - ยังไม่ได้ตั้งค่า Wi-Fi และ `DEVICE_TOKEN` ลง firmware ของบอร์ดจริง
 - ยังไม่มีบอร์ดจริงส่ง heartbeat ให้ Worker
+- ยังไม่ได้ตั้งค่า ThingsBoard Customer user credentials และรหัสผ่านหน้า **ความปลอดภัยตู้โชว์** ใน Cloudflare Worker
+- ยังไม่ได้ตรวจว่า API user มีสิทธิ์อ่าน asset และอุปกรณ์ของตู้โชว์
 - ยังไม่ได้แฟลชหรือทดสอบกับ ESP32, SG90, กล้อง หรือ PIR จริง
 - ค่ารุ่นและขาเชื่อมต่อของอุปกรณ์จริงต้องยืนยันจากภาพอุปกรณ์ก่อน

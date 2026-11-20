@@ -89,6 +89,11 @@ let serialReader = null;
 let serialDeviceInfo = null;
 let serialReadBuffer = "";
 let serialDisconnectHandler = null;
+let showroomAccessPassword = "";
+let showroomSecurityData = null;
+let showroomSecurityError = "";
+let showroomSecurityLoading = false;
+let showroomSelectedDevice = 0;
 
 function readStore(key, fallback) {
   const raw = localStorage.getItem(key);
@@ -281,6 +286,7 @@ function header() {
     ? `<a href="#admin" ${active === "admin" ? 'aria-current="page"' : ""}>สินค้า</a>
        <a href="#admin/content">เนื้อหาเว็บไซต์</a>
        <a href="#dashboard" ${active === "dashboard" ? 'aria-current="page"' : ""}>แดชบอร์ด</a>
+       <a href="#security" ${active === "security" ? 'aria-current="page"' : ""}>ความปลอดภัยตู้โชว์</a>
        <a href="#device" ${active === "device" ? 'aria-current="page"' : ""}>เชื่อมต่อบอร์ด</a>`
     : `<a href="#catalog" ${active === "catalog" ? 'aria-current="page"' : ""}>แคตตาล็อก</a>
        <a href="#live" ${active === "live" ? 'aria-current="page"' : ""}>ตู้โชว์อัญมณี</a>`;
@@ -744,6 +750,7 @@ function adminNav(active) {
     ["admin", "สินค้าและสต็อก", "ADM-01 · ADM-04"],
     ["admin/content", "เนื้อหาเว็บไซต์", "ADM-05"],
     ["dashboard", "แดชบอร์ด", "DB-01 · DB-05"],
+    ["security", "ความปลอดภัยตู้โชว์", "ThingsBoard · API"],
     ["device", "เชื่อมต่อบอร์ด", "ESP32 · USB / Wi-Fi"]
   ];
   return `<aside class="admin-side" aria-label="เมนูผู้ดูแล"><span class="admin-side-title">จัดการร้าน</span>${links.map(([route, label, code]) => `<button type="button" data-route="${route}" aria-current="${active === route ? "page" : "false"}">${label}<br><small>${code}</small></button>`).join("")}<button type="button" data-action="reset-demo">คืนค่าข้อมูลเดโม</button></aside>`;
@@ -1019,6 +1026,157 @@ function devicePage() {
     </section></div></div>`;
 }
 
+function showroomValueLabel(value, yes, no) {
+      if (value === true) return yes;
+      if (value === false) return no;
+      return "ยังไม่มีข้อมูล";
+}
+
+function showroomTimestamp(timestamp) {
+      if (!Number.isFinite(Number(timestamp))) return "ยังไม่มีข้อมูล";
+      return new Intl.DateTimeFormat("th-TH", {
+        timeZone: "Asia/Bangkok",
+        dateStyle: "medium",
+        timeStyle: "short"
+      }).format(new Date(Number(timestamp)));
+}
+
+function showroomMetric(value, decimals = 1, unit = "") {
+      return Number.isFinite(value) ? `${value.toLocaleString("th-TH", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+      })}${unit}` : "ยังไม่มีข้อมูล";
+}
+
+function showroomTrendChart(device) {
+      const vibration = device.history?.vibration || [];
+      const dailyMax = device.history?.dailyMaxVibration || [];
+      const threshold = device.maxVibrationThreshold?.value;
+      if (!vibration.length && !dailyMax.length) {
+        return `<section class="data-panel security-chart"><h2>แนวโน้มแรงสั่นสะเทือน · 7 วัน</h2>${emptyState("ยังไม่มีข้อมูลกราฟ", "กราฟจะแสดงเมื่ออุปกรณ์ส่ง vibration หรือ dailyMaxVibration มายัง ThingsBoard")}</section>`;
+      }
+      const width = 760;
+      const height = 250;
+      const left = 58;
+      const right = 744;
+      const top = 20;
+      const bottom = 194;
+      const samples = [...vibration, ...dailyMax].filter((point) => Number.isFinite(point.value));
+      const max = Math.max(1, ...samples.map((point) => point.value), Number.isFinite(threshold) ? threshold : 0) * 1.12;
+      const toPoints = (series) => series.map((point, index) => ({
+        x: left + (series.length === 1 ? 0 : index * (right - left) / (series.length - 1)),
+        y: bottom - Math.max(0, point.value) / max * (bottom - top),
+        ...point
+      }));
+      const vibrationPoints = toPoints(vibration);
+      const dailyPoints = toPoints(dailyMax);
+      const toPath = (points) => points.map((point, index) =>
+        `${index ? "L" : "M"}${point.x.toFixed(1)},${point.y.toFixed(1)}`
+      ).join(" ");
+      const grid = Array.from({ length: 4 }, (_, index) => {
+        const y = top + index * (bottom - top) / 3;
+        const value = max * (3 - index) / 3;
+        return `<g class="chart-gridline"><line x1="${left}" y1="${y}" x2="${right}" y2="${y}"></line><text x="${left - 10}" y="${y + 4}" text-anchor="end">${value.toFixed(1)}</text></g>`;
+      }).join("");
+      const thresholdLine = Number.isFinite(threshold)
+        ? `<line class="security-threshold" x1="${left}" y1="${bottom - threshold / max * (bottom - top)}" x2="${right}" y2="${bottom - threshold / max * (bottom - top)}"><title>เกณฑ์แรงสั่นสะเทือน ${threshold} mm/s</title></line>`
+        : "";
+      const labelPoints = [...vibrationPoints, ...dailyPoints];
+      const first = labelPoints[0];
+      const middle = labelPoints[Math.floor((labelPoints.length - 1) / 2)];
+      const last = labelPoints[labelPoints.length - 1];
+      const dateLabels = [...new Set([first, middle, last].filter(Boolean))].map((point, index, list) => {
+        const anchor = list.length === 1 ? "middle" : index === 0 ? "start" : index === list.length - 1 ? "end" : "middle";
+        return `<text class="chart-axis-label" x="${point.x}" y="${bottom + 25}" text-anchor="${anchor}">${escapeHtml(new Date(point.ts).toLocaleDateString("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "short" }))}</text>`;
+      }).join("");
+      const vibrationPath = vibrationPoints.length ? `<path class="chart-line" d="${toPath(vibrationPoints)}"></path>` : "";
+      const dailyPath = dailyPoints.length ? `<path class="security-daily-line" d="${toPath(dailyPoints)}"></path>` : "";
+      return `<figure class="data-panel security-chart">
+        <figcaption class="chart-heading"><div><h2>แนวโน้มแรงสั่นสะเทือน · ${escapeHtml(device.name)}</h2><p>ข้อมูลจาก ThingsBoard ย้อนหลัง 7 วัน · หน่วย mm/s</p></div></figcaption>
+        <div class="security-legend"><span><i></i>แรงสั่นสะเทือน</span><span class="security-legend-daily"><i></i>ค่าสูงสุดรายวัน</span>${Number.isFinite(threshold) ? `<span class="security-legend-threshold"><i></i>เกณฑ์ ${showroomMetric(threshold)} mm/s</span>` : ""}</div>
+        <svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="กราฟแรงสั่นสะเทือนของ ${escapeHtml(device.name)} ย้อนหลัง 7 วัน" preserveAspectRatio="none">
+          ${grid}${thresholdLine}${vibrationPath}${dailyPath}
+          ${vibrationPoints.map((point) => `<circle class="chart-point" cx="${point.x}" cy="${point.y}" r="2.5"><title>${escapeHtml(showroomTimestamp(point.ts))}: ${showroomMetric(point.value)} mm/s</title></circle>`).join("")}
+          ${dailyPoints.map((point) => `<circle class="security-daily-point" cx="${point.x}" cy="${point.y}" r="2.5"><title>${escapeHtml(showroomTimestamp(point.ts))}: ${showroomMetric(point.value)} mm/s</title></circle>`).join("")}
+          ${dateLabels}
+        </svg>
+      </figure>`;
+}
+
+function showroomSecurityResults() {
+      const devices = Array.isArray(showroomSecurityData?.devices) ? showroomSecurityData.devices : [];
+      const alerts = devices.flatMap((device) => (device.alerts || []).map((alert) => ({ name: device.name, message: alert })));
+      const selected = devices.find((device) => device.key === showroomSelectedDevice) || devices[0];
+      const securityRows = devices.map((device) => {
+        const state = device.status === "secure"
+          ? '<span class="status-pill status-available">ปกติ</span>'
+          : device.status === "inactive"
+            ? '<span class="status-pill status-out">ไม่ทำงาน</span>'
+            : device.status === "attention"
+              ? '<span class="status-pill status-out">ต้องตรวจสอบ</span>'
+              : '<span class="status-pill status-neutral">ไม่มีข้อมูล</span>';
+        return `<tr>
+          <td><strong>${escapeHtml(device.name)}</strong><small>อัปเดต ${escapeHtml(showroomTimestamp(device.lastSeen))}</small></td>
+          <td>${state}</td>
+          <td>${escapeHtml(showroomValueLabel(device.authorized?.value, "อนุญาต", "ไม่อนุญาต"))}</td>
+          <td>${escapeHtml(showroomValueLabel(device.coverOpen?.value, "เปิด", "ปิด"))}</td>
+          <td>${escapeHtml(showroomValueLabel(device.itemPresent?.value, "มี", "ไม่พบ"))}</td>
+          <td>${showroomMetric(device.vibration?.value)} mm/s</td>
+          <td>${showroomMetric(device.weight?.value)}</td>
+          <td>${showroomMetric(device.battery?.value, 0, "%")}</td>
+          <td><button class="button button-quiet button-small" type="button" data-action="select-showroom-device" data-index="${device.key}">ดูกราฟ</button></td>
+        </tr>`;
+      }).join("");
+      const alertContent = alerts.length
+        ? `<ul class="security-alert-list">${alerts.map((alert) => `<li><strong>${escapeHtml(alert.name)}:</strong> ${escapeHtml(alert.message)}</li>`).join("")}</ul>`
+        : `<p class="security-empty-alert">${devices.length ? "ไม่พบเงื่อนไขเตือนจากค่าล่าสุด" : "ยังไม่พบอุปกรณ์ที่เชื่อมกับ asset ของตู้โชว์"}</p>`;
+      const alertTone = alerts.length ? "notice-warning" : "notice-info";
+      return `<div class="metric-grid security-metrics">
+          <div class="metric"><span>แท่นจัดแสดง</span><strong>${devices.length}</strong></div>
+          <div class="metric"><span>กำลังทำงาน</span><strong>${devices.filter((device) => device.active === true).length}</strong></div>
+          <div class="metric"><span>ต้องตรวจสอบ</span><strong>${devices.filter((device) => device.alerts?.length).length}</strong></div>
+        </div>
+        <section class="data-panel">
+          <div class="security-section-heading"><div><h2>สถานะอุปกรณ์</h2><p>ค่าล่าสุดจาก ThingsBoard REST API</p></div></div>
+          <div class="table-wrap"><table class="security-table"><thead><tr><th>แท่น</th><th>สถานะ</th><th>การอนุญาต</th><th>ฝาครอบ</th><th>เครื่องประดับ</th><th>แรงสั่น</th><th>น้ำหนัก</th><th>แบตเตอรี่</th><th>กราฟ</th></tr></thead>
+          <tbody>${securityRows || `<tr><td colspan="9">${emptyState("ยังไม่พบแท่นจัดแสดง", "ตรวจสอบว่า asset ใน ThingsBoard มีอุปกรณ์เชื่อมด้วย relation jewelryShowroomTodiamondPedestal และ API user มีสิทธิ์อ่านอุปกรณ์")}</td></tr>`}</tbody></table></div>
+        </section>
+        <section class="notice ${alertTone} security-alerts" role="status"><strong>เงื่อนไขเตือนจากข้อมูลล่าสุด</strong>${alertContent}</section>
+        ${selected ? showroomTrendChart(selected) : ""}`;
+}
+
+function showroomSecurityPage() {
+      if (currentUser?.role !== "admin") {
+        navigate(currentUser ? "home" : "login");
+        return "";
+      }
+      const errorNote = showroomSecurityError
+        ? `<div class="notice notice-danger security-feedback" role="alert">${escapeHtml(showroomSecurityError)}</div>`
+        : "";
+      const content = showroomSecurityData
+        ? `${showroomSecurityResults()}
+          <div class="security-data-meta">อัปเดตจาก ThingsBoard: ${escapeHtml(showroomTimestamp(showroomSecurityData.updatedAt))}</div>`
+        : `<section class="data-panel security-access-panel">
+            <h2>ยืนยันสิทธิ์ดูข้อมูล</h2>
+            <p>ป้อนรหัสผ่านส่วนดูข้อมูลที่ตั้งไว้ใน Cloudflare Worker ข้อมูลนี้แยกจากบัญชีตัวอย่างในเว็บไซต์ และจะอยู่ในหน่วยความจำของแท็บนี้เท่านั้น</p>
+            <form class="security-access-form" id="showroom-access-form">
+              <label class="field"><span class="field-label">รหัสผ่านส่วนดูข้อมูล</span><input class="form-control" name="showroomPassword" type="password" autocomplete="off" required minlength="32" maxlength="128"></label>
+              <button class="button button-primary" type="submit" ${showroomSecurityLoading ? "disabled" : ""}>${showroomSecurityLoading ? "กำลังเชื่อมต่อ…" : "เชื่อมต่อ ThingsBoard API"}</button>
+            </form>
+          </section>`;
+      const actions = showroomSecurityData
+        ? `<div class="security-toolbar"><span>ข้อมูลอ่านอย่างเดียวจากโปรเจกต์ Showroom Security Management</span><div><button class="button button-secondary" type="button" data-action="refresh-showroom-security" ${showroomSecurityLoading ? "disabled" : ""}>${showroomSecurityLoading ? "กำลังอัปเดต…" : "อัปเดตข้อมูลล่าสุด"}</button><button class="button button-quiet" type="button" data-action="lock-showroom-security">ล็อกข้อมูล</button></div></div>`
+        : "";
+      return `<div class="container"><div class="admin-shell">${adminNav("security")}
+        <section class="admin-content security-dashboard">
+          <p class="eyebrow">ThingsBoard · REST API</p>
+          <h1>ความปลอดภัยตู้โชว์</h1>
+          <p class="lede">สถานะฝาครอบ การอนุญาต แรงสั่นสะเทือน และแบตเตอรี่ของแท่นจัดแสดง</p>
+          ${errorNote}${actions}${content}
+          <p class="field-hint security-source-note">กราฟและสถานะนี้อ่านจาก telemetry ใน ThingsBoard โดยตรง รายการเตือนคำนวณจากค่าล่าสุดและเกณฑ์ที่ตั้งไว้ในอุปกรณ์</p>
+        </section></div></div>`;
+}
+
 function setConnectionStatus(kind, state, message) {
   const badge = document.querySelector(`#${kind}-state-badge`);
   const messageNode = document.querySelector(`#${kind}-state-message`);
@@ -1247,6 +1405,55 @@ async function checkCloudDeviceStatus() {
   }
 }
 
+function showroomApiError(response, data) {
+  if (response.status === 401) return "รหัสผ่านส่วนดูข้อมูลไม่ถูกต้อง";
+  if (response.status === 503) return "ยังไม่ได้ตั้งค่าบัญชีอ่านข้อมูล ThingsBoard หรือรหัสผ่านส่วนดูข้อมูลใน Cloudflare Worker";
+  if (data?.upstreamStatus === 401 || data?.upstreamStatus === 403) {
+    return "ThingsBoard ปฏิเสธบัญชีอ่านข้อมูล โปรดตรวจสอบอีเมล รหัสผ่าน และสิทธิ์ของลูกค้า";
+  }
+  if (data?.upstreamStatus === 404) {
+    return "ThingsBoard ไม่พบ asset หรืออุปกรณ์ตามข้อมูลใน dashboard export";
+  }
+  return "เชื่อมต่อ ThingsBoard ไม่สำเร็จ โปรดลองอีกครั้งหรือตรวจสอบการตั้งค่า Worker";
+}
+
+async function loadShowroomSecurity(password) {
+  if (!password || showroomSecurityLoading) return;
+  const apiBase = String(window.GEMSTONE_DEVICE_CONFIG?.apiBase || "").trim().replace(/\/+$/, "");
+  if (!apiBase) {
+    showroomSecurityError = "ยังไม่ได้ตั้งค่า URL ของ Cloudflare Worker";
+    render();
+    return;
+  }
+  showroomSecurityLoading = true;
+  showroomSecurityError = "";
+  render();
+  try {
+    const response = await fetch(`${apiBase}/api/showroom/security`, {
+      headers: { accept: "application/json", authorization: `Bearer ${password}` },
+      cache: "no-store"
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(showroomApiError(response, data));
+    if (currentRoute === "security") {
+      showroomAccessPassword = password;
+      showroomSecurityData = data;
+      showroomSecurityError = "";
+      if (!data.devices?.some((device) => device.key === showroomSelectedDevice)) {
+        showroomSelectedDevice = data.devices?.[0]?.key ?? 0;
+      }
+    }
+  } catch (error) {
+    if (currentRoute === "security") {
+      showroomSecurityError = error.message || "เชื่อมต่อ ThingsBoard ไม่สำเร็จ";
+      if (!showroomSecurityData) showroomAccessPassword = "";
+    }
+  } finally {
+    showroomSecurityLoading = false;
+    if (currentRoute === "security") render();
+  }
+}
+
 function navigate(route) {
   const next = route.replace(/^#/, "");
   if (location.hash.slice(1) === next) {
@@ -1263,6 +1470,12 @@ function render() {
   const previousRoute = currentRoute;
   currentRoute = route;
   if (previousRoute === "device" && route !== "device" && serialPort) void disconnectSerialDevice();
+  if (previousRoute === "security" && route !== "security") {
+    showroomAccessPassword = "";
+    showroomSecurityData = null;
+    showroomSecurityError = "";
+    showroomSecurityLoading = false;
+  }
   const [page, ...rest] = route.split("/");
   if (page === "home") shell(homePage());
   else if (page === "catalog") shell(catalogPage());
@@ -1275,6 +1488,7 @@ function render() {
   else if (page === "admin" && rest[0] === "content") shell(contentAdminPage(), { admin: true });
   else if (page === "admin") shell(adminPage(), { admin: true });
   else if (page === "dashboard") shell(dashboardPage(), { admin: true });
+  else if (page === "security") shell(showroomSecurityPage(), { admin: true });
   else if (page === "device") {
     shell(devicePage(), { admin: true });
     if (currentUser?.role === "admin") void checkCloudDeviceStatus();
@@ -1556,6 +1770,17 @@ function onClick(event) {
         .catch((error) => setConnectionStatus("serial", "เกิดข้อผิดพลาด", `ส่งคำสั่งหยุดไม่สำเร็จ: ${error.message}`));
       break;
     case "check-cloud-device": void checkCloudDeviceStatus(); break;
+    case "refresh-showroom-security": void loadShowroomSecurity(showroomAccessPassword); break;
+    case "lock-showroom-security":
+      showroomAccessPassword = "";
+      showroomSecurityData = null;
+      showroomSecurityError = "";
+      render();
+      break;
+    case "select-showroom-device":
+      showroomSelectedDevice = Number(target.dataset.index || 0);
+      render();
+      break;
     case "select-photo":
       currentDetailImage = Number(target.dataset.index || 0);
       render();
@@ -1577,7 +1802,16 @@ function onClick(event) {
 async function onSubmit(event) {
   const form = event.target;
   if (!(form instanceof HTMLFormElement)) return;
-  if (form.id === "catalog-search") {
+  if (form.id === "showroom-access-form") {
+    event.preventDefault();
+    const password = String(new FormData(form).get("showroomPassword") || "").trim();
+    if (password.length < 32) {
+      showroomSecurityError = "รหัสผ่านส่วนดูข้อมูลต้องมีอย่างน้อย 32 ตัวอักษร";
+      render();
+      return;
+    }
+    await loadShowroomSecurity(password);
+  } else if (form.id === "catalog-search") {
     event.preventDefault();
     const data = new FormData(form);
     catalogQuery = String(data.get("query") || "").trim();

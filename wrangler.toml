@@ -6,6 +6,8 @@ workers_dev = true
 [vars]
 WEB_ORIGINS = "https://chonlachattee2548-crypto.github.io,http://localhost:4173,http://127.0.0.1:4173"
 REMOTE_CONTROL_ENABLED = "false"
+THINGSBOARD_URL = "https://thingsboard.cloud"
+SHOWROOM_ASSET_ID = "c8e6f4f0-e4ec-11f1-9e1c-c93dd85f5a1f"
 
 [[durable_objects.bindings]]
 name = "TURN_TABLE"

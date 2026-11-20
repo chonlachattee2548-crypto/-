@@ -6,6 +6,9 @@ const GLOBAL_COOLDOWN_MS = 60_000;
 const VISITOR_COOLDOWN_MS = 60_000;
 const MAX_COOLDOWN_ENTRIES = 512;
 const ROTATE_COMMAND = "rotate_360_once";
+const SHOWROOM_RELATION_TYPE = "jewelryShowroomTodiamondPedestal";
+const SHOWROOM_LATEST_KEYS = ["authorized", "itemPresent", "coverOpen", "weight", "vibration", "battery", "dailyMaxVibration"];
+const SHOWROOM_HISTORY_KEYS = ["vibration", "dailyMaxVibration"];
 
 function jsonResponse(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), {
@@ -96,6 +99,197 @@ async function authorizeDevice(request, env) {
   return secureEqual(received.slice(7), expected);
 }
 
+function showroomViewerAuthorized(request, env) {
+  const expected = String(env.SHOWROOM_DASHBOARD_PASSWORD || "");
+  const received = request.headers.get("authorization") || "";
+  if (expected.length < 32 || !received.startsWith("Bearer ")) return false;
+  return secureEqual(received.slice(7), expected);
+}
+
+function thingsBoardBaseUrl(env) {
+  const baseUrl = new URL(env.THINGSBOARD_URL || "https://thingsboard.cloud");
+  if (baseUrl.protocol !== "https:" || baseUrl.username || baseUrl.password) {
+    throw new Error("invalid_thingsboard_url");
+  }
+  return baseUrl;
+}
+
+async function thingsBoardLogin(env) {
+  const username = String(env.THINGSBOARD_USERNAME || "").trim();
+  const password = String(env.THINGSBOARD_PASSWORD || "");
+  const baseUrl = thingsBoardBaseUrl(env);
+  const response = await fetch(new URL("/api/auth/login", baseUrl.origin), {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ username, password })
+  });
+  if (!response.ok) {
+    const error = new Error("thingsboard_login_failed");
+    error.status = response.status;
+    throw error;
+  }
+  const session = await response.json();
+  if (typeof session.token !== "string" || !session.token) {
+    throw new Error("thingsboard_login_response_invalid");
+  }
+  return session.token;
+}
+
+async function thingsBoardGet(env, path, token) {
+  const baseUrl = thingsBoardBaseUrl(env);
+  const url = new URL(path, `${baseUrl.origin}/`);
+  const response = await fetch(url, {
+    headers: {
+      accept: "application/json",
+      "X-Authorization": `Bearer ${token}`
+    }
+  });
+  if (!response.ok) {
+    const error = new Error("thingsboard_request_failed");
+    error.status = response.status;
+    throw error;
+  }
+  return response.json();
+}
+
+function valueAsBoolean(value) {
+  if (typeof value === "boolean") return value;
+  if (value === "true" || value === 1 || value === "1") return true;
+  if (value === "false" || value === 0 || value === "0") return false;
+  return null;
+}
+
+function valueAsNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function latestTelemetry(data, key, convert = (value) => value) {
+  const point = data?.[key]?.[0];
+  if (!point) return { value: null, ts: null };
+  return { value: convert(point.value), ts: valueAsNumber(point.ts) };
+}
+
+function latestAttribute(data, key, convert = (value) => value) {
+  const attribute = data.find((item) => item.key === key);
+  return attribute
+    ? { value: convert(attribute.value), ts: valueAsNumber(attribute.lastUpdateTs) }
+    : { value: null, ts: null };
+}
+
+function sanitizeHistory(data) {
+  return Object.fromEntries(SHOWROOM_HISTORY_KEYS.map((key) => [
+    key,
+    (Array.isArray(data?.[key]) ? data[key] : [])
+      .map((point) => ({ ts: valueAsNumber(point.ts), value: valueAsNumber(point.value) }))
+      .filter((point) => point.ts !== null && point.value !== null)
+  ]));
+}
+
+function showroomAlerts(device) {
+  const alerts = [];
+  if (device.active === false) alerts.push("อุปกรณ์ไม่ทำงาน");
+  if (device.authorized.value === false) alerts.push("ตรวจพบการเข้าถึงที่ไม่ได้รับอนุญาต");
+  if (device.coverOpen.value === true) alerts.push("ฝาครอบตู้เปิดอยู่");
+  if (device.itemPresent.value === false) alerts.push("ไม่พบเครื่องประดับบนแท่น");
+  if (device.vibration.value !== null && device.maxVibrationThreshold.value !== null
+    && device.vibration.value > device.maxVibrationThreshold.value) {
+    alerts.push("แรงสั่นสะเทือนเกินค่าที่กำหนด");
+  }
+  return alerts;
+}
+
+async function showroomSecurityData(env) {
+  const username = String(env.THINGSBOARD_USERNAME || "").trim();
+  const password = String(env.THINGSBOARD_PASSWORD || "");
+  const assetId = String(env.SHOWROOM_ASSET_ID || "");
+  if (!username || !password || !assetId || String(env.SHOWROOM_DASHBOARD_PASSWORD || "").length < 32) {
+    return jsonResponse({ error: "showroom_api_not_configured" }, 503, { "cache-control": "no-store" });
+  }
+
+  const relationsQuery = new URLSearchParams({
+    fromId: assetId,
+    fromType: "ASSET",
+    relationType: SHOWROOM_RELATION_TYPE,
+    relationTypeGroup: "COMMON"
+  }).toString();
+
+  try {
+    const accessToken = await thingsBoardLogin(env);
+    const relations = await thingsBoardGet(env, `/api/relations?${relationsQuery}`, accessToken);
+    const targets = (Array.isArray(relations) ? relations : [])
+      .filter((relation) => relation.from?.id === assetId && relation.to?.entityType === "DEVICE")
+      .map((relation) => relation.to.id)
+      .filter((id) => typeof id === "string")
+      .slice(0, 20);
+    const endTs = Date.now();
+    const startTs = endTs - 7 * 24 * 60 * 60 * 1000;
+    const devices = await Promise.all(targets.map(async (deviceId, index) => {
+      const encodedId = encodeURIComponent(deviceId);
+      const latestQuery = new URLSearchParams({ keys: SHOWROOM_LATEST_KEYS.join(",") });
+      const attributeQuery = new URLSearchParams({ keys: "active,maxVibrationThreshold" });
+      const historyQuery = new URLSearchParams({
+        keys: SHOWROOM_HISTORY_KEYS.join(","),
+        startTs: String(startTs),
+        endTs: String(endTs),
+        limit: "250",
+        agg: "NONE",
+        orderBy: "ASC"
+      });
+      const [deviceInfo, latest, attributes, history] = await Promise.all([
+        thingsBoardGet(env, `/api/device/${encodedId}`, accessToken),
+        thingsBoardGet(env, `/api/plugins/telemetry/DEVICE/${encodedId}/values/timeseries?${latestQuery}`, accessToken),
+        thingsBoardGet(env, `/api/plugins/telemetry/DEVICE/${encodedId}/values/attributes?${attributeQuery}`, accessToken),
+        thingsBoardGet(env, `/api/plugins/telemetry/DEVICE/${encodedId}/values/timeseries?${historyQuery}`, accessToken)
+      ]);
+      const attributeList = Array.isArray(attributes) ? attributes : [];
+      const active = latestAttribute(attributeList, "active", valueAsBoolean).value;
+      const securityDevice = {
+        key: index,
+        name: typeof deviceInfo.name === "string" ? deviceInfo.name.slice(0, 80) : `แท่นจัดแสดง ${index + 1}`,
+        active,
+        authorized: latestTelemetry(latest, "authorized", valueAsBoolean),
+        itemPresent: latestTelemetry(latest, "itemPresent", valueAsBoolean),
+        coverOpen: latestTelemetry(latest, "coverOpen", valueAsBoolean),
+        weight: latestTelemetry(latest, "weight", valueAsNumber),
+        vibration: latestTelemetry(latest, "vibration", valueAsNumber),
+        battery: latestTelemetry(latest, "battery", valueAsNumber),
+        dailyMaxVibration: latestTelemetry(latest, "dailyMaxVibration", valueAsNumber),
+        maxVibrationThreshold: latestAttribute(attributeList, "maxVibrationThreshold", valueAsNumber),
+        history: sanitizeHistory(history)
+      };
+      const timestamps = [
+        ...Object.values(securityDevice)
+          .filter((item) => item && typeof item === "object" && "ts" in item)
+          .map((item) => item.ts),
+        ...attributeList.map((item) => valueAsNumber(item.lastUpdateTs))
+      ].filter((timestamp) => timestamp !== null);
+      securityDevice.lastSeen = timestamps.length ? Math.max(...timestamps) : null;
+      securityDevice.alerts = showroomAlerts(securityDevice);
+      securityDevice.status = securityDevice.alerts.length
+        ? "attention"
+        : active === true ? "secure" : active === false ? "inactive" : "unknown";
+      return securityDevice;
+    }));
+
+    return jsonResponse({
+      source: "ThingsBoard Cloud REST API",
+      updatedAt: endTs,
+      devices
+    }, 200, { "cache-control": "no-store" });
+  } catch (error) {
+    console.error("ThingsBoard showroom API request failed", error.status || "network_error");
+    return jsonResponse({
+      error: "thingsboard_request_failed",
+      upstreamStatus: Number.isInteger(error.status) ? error.status : null
+    }, 502, { "cache-control": "no-store" });
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -125,6 +319,13 @@ export default {
     if (url.pathname === "/api/status" && request.method === "GET") {
       const response = await roomStub(env).fetch("https://room.internal/_/status");
       return withCors(response, origin, env);
+    }
+
+    if (url.pathname === "/api/showroom/security" && request.method === "GET") {
+      if (!showroomViewerAuthorized(request, env)) {
+        return withCors(jsonResponse({ error: "showroom_unauthorized" }, 401, { "cache-control": "no-store" }), origin, env);
+      }
+      return withCors(await showroomSecurityData(env), origin, env);
     }
 
     if (url.pathname === "/api/commands/rotate" && request.method === "POST") {
